@@ -1621,8 +1621,14 @@ def run_code(encoding, outputdir, workingdir, code_list, language, commands,
 
             for block in out.split('=>PYTHONTEX:STDOUT#')[1:]:
                 if block:
-                    delims, content = block.split('#\n', 1)
-                    instance, command = delims.split('#')
+                    try:
+                        delims, content = block.split('#\n', 1)
+                        instance, command = delims.split('#')
+                    except:
+                        messages.append('* PythonTeX error')
+                        messages.append('    block and/or delims split failed; invalid template?')
+                        errors += 1
+                        break
                     if content or command in ('s', 'sub'):
                         if instance.endswith('CC'):
                             messages.append('* PythonTeX warning')
