@@ -33,7 +33,7 @@ from hashlib import sha1
 from collections import OrderedDict, namedtuple
 
 
-interpreter_dict = {k:k for k in ('python', 'ruby', 'julia', 'octave', 'bash', 'sage', 'rustc')}
+interpreter_dict = {k:k for k in ('python', 'ruby', 'julia', 'octave', 'bash', 'sage', 'rustc', 'maxima')}
 # The {file} field needs to be replaced by itself, since the actual
 # substitution of the real file can only be done at runtime, whereas the
 # substitution for the interpreter should be done when the engine is
@@ -1540,3 +1540,25 @@ CodeEngine('rust', 'rust', '.rs',
            created='{File}.exe')
 
 SubCodeEngine('rust', 'rs')
+
+maxima_template = '''
+    {body}
+    "\n{dependencies_delim}\n{created_delim}\n"$
+    '''
+
+maxima_wrapper = '''
+    "\n{stdoutdelim}\n"$
+    {code}
+    '''
+
+maxima_sub = '''"\n{field_delim}\n"$ {field}'''
+
+def maxima_post_processor(input, output):
+    return output
+
+CodeEngine('maxima', 'maxima', '.mac',
+           '{maxima} --batch="{file}.mac"',
+           maxima_template, maxima_wrapper, '{code}', maxima_sub,
+           ['error', 'Error'], ['warning', 'Warning'],
+           'line {number}',
+           post_processor = maxima_post_processor)
