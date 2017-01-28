@@ -1286,6 +1286,7 @@ def do_multiprocessing(data, temp_data, old_data, engine_dict):
                                                  engine_dict[family].warnings,
                                                  engine_dict[family].linenumbers,
                                                  engine_dict[family].lookbehind,
+                                                 engine_dict[family].post_processor,
                                                  keeptemps, hashdependencies)'''
         tasks.append(pool.apply_async(run_code, [encoding, outputdir,
                                                  workingdir, code_dict[key],
@@ -1299,6 +1300,7 @@ def do_multiprocessing(data, temp_data, old_data, engine_dict):
                                                  engine_dict[family].warnings,
                                                  engine_dict[family].linenumbers,
                                                  engine_dict[family].lookbehind,
+                                                 engine_dict[family].post_processor,
                                                  keeptemps, hashdependencies]))
         if verbose:
             print('    - Code process ' + key.replace('#', ':'))
@@ -1475,7 +1477,7 @@ def do_multiprocessing(data, temp_data, old_data, engine_dict):
 def run_code(encoding, outputdir, workingdir, code_list, language, commands,
              command_created, extension, makestderr, stderrfilename,
              code_index, errorsig, warningsig, linesig, stderrlookbehind,
-             keeptemps, hashdependencies):
+             post_processor, keeptemps, hashdependencies):
     '''
     Function for multiprocessing code files
     '''
@@ -1655,6 +1657,8 @@ def run_code(encoding, outputdir, workingdir, code_list, language, commands,
                                     # Remove newline added by printing, prevent
                                     # LaTeX from adding a space after content
                                     content = content.rsplit('\n', 1)[0] + '\\endinput\n'
+                            if callable(post_processor):
+                                content = post_processor(code_list[int(instance)].code, content)
                             f.write(content)
                             f.close()
                             files.append(fname)
