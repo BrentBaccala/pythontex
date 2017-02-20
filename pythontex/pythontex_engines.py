@@ -1542,6 +1542,8 @@ CodeEngine('rust', 'rust', '.rs',
 SubCodeEngine('rust', 'rs')
 
 maxima_template = '''
+    load("alt-display.mac")$
+    set_alt_display(2,tex_display)$
     {body}
     "\n{dependencies_delim}\n{created_delim}\n"$
     '''
@@ -1554,7 +1556,10 @@ maxima_wrapper = '''
 maxima_sub = '''"\n{field_delim}\n"$ {field}'''
 
 def maxima_post_processor(input, output):
-    return output
+    for line in output.split('\n'):
+        if re.match('\\\\mbox', line) is not None:
+            return '$$' + line.split('$$')[1] + '$$'
+    return ''
 
 CodeEngine('maxima', 'maxima', '.mac',
            '{maxima} --batch="{file}.mac"',
