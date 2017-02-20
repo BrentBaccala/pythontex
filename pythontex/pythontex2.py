@@ -1648,8 +1648,13 @@ def run_code(encoding, outputdir, workingdir, code_list, language, commands,
                             f = open(os.path.expanduser(os.path.normcase(fname)), 'w', encoding=encoding)
                             if command in ('s', 'sub'):
                                 if content:
-                                    fields = [x.split('\n', 1)[1].rsplit('\n', 1)[0] for x in content.split('=>PYTHONTEX:FIELD_DELIM#')[1:]]
-                                    content = code_list[int(instance)].sub_template.format(*fields)
+                                    try:
+                                        fields = [x.split('\n', 1)[1].rsplit('\n', 1)[0] for x in content.split('=>PYTHONTEX:FIELD_DELIM#')[1:]]
+                                        content = code_list[int(instance)].sub_template.format(*fields)
+                                    except:
+                                        messages.append('* PythonTeX error')
+                                        messages.append('    fields / split / format failed; invalid template?')
+                                        errors += 1
                                 else:
                                     # If no replacement fields, de-templatize
                                     content = code_list[int(instance)].sub_template.replace('{{', '{').replace('}}', '}')
