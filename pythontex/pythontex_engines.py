@@ -1554,18 +1554,33 @@ CodeEngine('rust', 'rust', '.rs',
 SubCodeEngine('rust', 'rs')
 
 maxima_template = '''
-    load("alt-display.mac")$
-    set_alt_display(2,tex_display)$
     {body}
     "\n{dependencies_delim}\n{created_delim}\n"$
     '''
 
 maxima_wrapper = '''
-    "\n{stdoutdelim}\n"$
     {code}
     '''
 
 maxima_sub = '''"\n{field_delim}\n"$ {field}'''
+
+import inspect
+
+def maxima_init():
+    outputdir = inspect.currentframe(1).f_locals["outputdir"]
+    initfile = open("{}/maxima-init.mac".format(outputdir), "w")
+    initfile.write('load("alt-display.mac")$\n')
+    initfile.write('set_alt_display(2,tex_display)$\n')
+    initfile.write('batch("{}/maxima_default_default.mac")$\n'.format(outputdir))
+    initfile.write('quit()$\n')
+    initfile.close()
+    return
+
+def maxima_pre_processor(output):
+    # output = re.sub("(\(%i[0-9]*\))", "=>PYTHONTEX:STDOUT#0#code#\n\\1", output, 1)
+    output = re.sub("(\(%i([0-9]*)\))", lambda (m): "=>PYTHONTEX:STDOUT#" + str(int(m.group(2))-1) + "#code#\n" + m.group(1), output, 1)
+    # print(output)
+    return output
 
 def maxima_post_processor(input, output):
     for line in output.split('\n'):
@@ -1574,8 +1589,10 @@ def maxima_post_processor(input, output):
     return ''
 
 CodeEngine('maxima', 'maxima', '.mac',
-           '{maxima} --batch="{file}.mac"',
+           '{maxima} --init-mac="{outputdir}/maxima-init.mac"',
            maxima_template, maxima_wrapper, '{code}', maxima_sub,
            ['error', 'Error'], ['warning', 'Warning'],
            'line {number}',
+           init = maxima_init,
+           pre_processor = maxima_pre_processor,
            post_processor = maxima_post_processor)
