@@ -1531,10 +1531,10 @@ def run_code(encoding, outputdir, workingdir, code_list, language, commands,
         # Must double-escape any backslashes so that they survive `shlex.split()`
         # `shlex.split()` only works with Unicode after 2.7.2
         if (sys.version_info.major == 2 and sys.version_info.micro < 3):
-            exec_cmd = shlex.split(bytes(command.format(file=script.replace('\\', '\\\\'), File=script_full.replace('\\', '\\\\'), workingdir=workingdir.replace('\\', '\\\\'))))
+            exec_cmd = shlex.split(bytes(command.format(file=script.replace('\\', '\\\\'), File=script_full.replace('\\', '\\\\'), workingdir=workingdir.replace('\\', '\\\\'), outputdir=outputdir)))
             exec_cmd = [unicode(elem) for elem in exec_cmd]
         else:
-            exec_cmd = shlex.split(command.format(file=script.replace('\\', '\\\\'), File=script_full.replace('\\', '\\\\'), workingdir=workingdir.replace('\\', '\\\\')))
+            exec_cmd = shlex.split(command.format(file=script.replace('\\', '\\\\'), File=script_full.replace('\\', '\\\\'), workingdir=workingdir.replace('\\', '\\\\'), outputdir=outputdir))
         # Add any created files due to the command
         # This needs to be done before attempts to execute, to prevent orphans
         try:
