@@ -63,13 +63,14 @@ class CodeEngine(object):
     '''
     def __init__(self, name, language, extension, commands, template, wrapper,
                  formatter, sub=None, errors=None, warnings=None,
-                 linenumbers=None, lookbehind=False, post_processor=None,
+                 linenumbers=None, lookbehind=False,
+                 init=None, pre_processor=None, post_processor=None,
                  console=False, startup=None, created=None):
 
         # Save raw arguments so that they may be reused by subtypes
         self._rawargs = (name, language, extension, commands, template, wrapper,
                          formatter, sub, errors, warnings,
-                         linenumbers, lookbehind, post_processor, console, startup, created)
+                         linenumbers, lookbehind, init, pre_processor, post_processor, console, startup, created)
 
         # Type check all strings, and make sure everything is Unicode
         if sys.version_info[0] == 2:
@@ -201,6 +202,16 @@ class CodeEngine(object):
         if not isinstance(lookbehind, bool):
             raise TypeError('CodeEngine needs "lookbehind" to be bool')
         self.lookbehind = lookbehind
+
+        # Type check init
+        if not init is None and not callable(init):
+            raise TypeError('CodeEngine needs "init" to be callable')
+        self.init = init
+
+        # Type check pre_processor
+        if not pre_processor is None and not callable(pre_processor):
+            raise TypeError('CodeEngine needs "pre_processor" to be callable')
+        self.pre_processor = pre_processor
 
         # Type check post_processor
         if not post_processor is None and not callable(post_processor):
