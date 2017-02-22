@@ -1558,7 +1558,11 @@ maxima_template = '''
     "\n{dependencies_delim}\n{created_delim}\n"$
     '''
 
+# The rationale behind this block() command is to insert {stdoutdelim}
+# without advancing the numbering on the result labels
+
 maxima_wrapper = '''
+    block(linenum:linenum-1, "{stdoutdelim}\n")$
     {code}
     '''
 
@@ -1576,17 +1580,12 @@ def maxima_init():
     initfile.close()
     return
 
-def maxima_pre_processor(output):
-    # output = re.sub("(\(%i[0-9]*\))", "=>PYTHONTEX:STDOUT#0#code#\n\\1", output, 1)
-    output = re.sub("(\(%i([0-9]*)\))", lambda (m): "=>PYTHONTEX:STDOUT#" + str(int(m.group(2))-1) + "#code#\n" + m.group(1), output, 1)
-    # print(output)
-    return output
-
 def maxima_post_processor(input, output):
-    for line in output.split('\n'):
-        if re.match('\\\\mbox', line) is not None:
-            return '$$' + line.split('$$')[1] + '$$'
-    return ''
+    result = ''
+    for line in re.split("\n(?=\(%i([0-9]*)\))", output):
+        if re.search('\\\\mbox', line) is not None:
+            result += '$$' + line.split('$$')[1] + '$$\n'
+    return result
 
 CodeEngine('maxima', 'maxima', '.mac',
            '{maxima} --init-mac="{outputdir}/maxima-init.mac"',
@@ -1594,5 +1593,4 @@ CodeEngine('maxima', 'maxima', '.mac',
            ['error', 'Error'], ['warning', 'Warning'],
            'line {number}',
            init = maxima_init,
-           pre_processor = maxima_pre_processor,
            post_processor = maxima_post_processor)
