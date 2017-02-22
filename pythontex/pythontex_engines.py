@@ -1585,7 +1585,7 @@ def maxima_init():
 
 def maxima_post_processor(input, output):
     inputs = input.split(';')
-    result = ''
+    result = '\\begin{maximacodeblock}\n'
     for line in re.split("\n(?=\(%i([0-9]*)\))", output):
         input_label = re.match("\(%i([0-9]*)\)", line)
         if input_label and re.search('\\\\mbox', line) is not None:
@@ -1595,6 +1595,7 @@ def maxima_post_processor(input, output):
                 if inputs[0][0] != '\n': result += '\n'
                 result += inputs.pop(0) + ';\n\end{SaveVerbatim}\n'
                 result += '\\maximaio{' + input_label.group(1) + '}{' + line.split('$$')[1] + '}\n'
+    result += '\\end{maximacodeblock}\n'
     return result
 
 CodeEngine('maxima', 'maxima', '.mac',
