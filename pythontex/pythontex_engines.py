@@ -1580,6 +1580,9 @@ def maxima_init():
     initfile.close()
     return
 
+# maxima input commands are saved in a verbatim environment named MaximaCode
+# maxima line numbers and output commands are passed to LaTeX command \maximaio
+
 def maxima_post_processor(input, output):
     inputs = input.split(';')
     result = ''
@@ -1588,8 +1591,10 @@ def maxima_post_processor(input, output):
         if input_label and re.search('\\\\mbox', line) is not None:
             output_label = re.search("\%o_([0-9]*)", line)
             if output_label and (input_label.group(1) == output_label.group(1)):
-                result += '\\maximaio{' + input_label.group(1) + '}{' + inputs.pop(0) + ";}{" + line.split('$$')[1] + '}\n'
-    print(result)
+                result += '\\begin{SaveVerbatim}{MaximaCode}'
+                if inputs[0][0] != '\n': result += '\n'
+                result += inputs.pop(0) + ';\n\end{SaveVerbatim}\n'
+                result += '\\maximaio{' + input_label.group(1) + '}{' + line.split('$$')[1] + '}\n'
     return result
 
 CodeEngine('maxima', 'maxima', '.mac',
