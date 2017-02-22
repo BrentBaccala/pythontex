@@ -1581,10 +1581,15 @@ def maxima_init():
     return
 
 def maxima_post_processor(input, output):
+    inputs = input.split(';')
     result = ''
     for line in re.split("\n(?=\(%i([0-9]*)\))", output):
-        if re.search('\\\\mbox', line) is not None:
-            result += '$$' + line.split('$$')[1] + '$$\n'
+        input_label = re.match("\(%i([0-9]*)\)", line)
+        if input_label and re.search('\\\\mbox', line) is not None:
+            output_label = re.search("\%o_([0-9]*)", line)
+            if output_label and (input_label.group(1) == output_label.group(1)):
+                result += '\\maximaio{' + input_label.group(1) + '}{' + inputs.pop(0) + ";}{" + line.split('$$')[1] + '}\n'
+    print(result)
     return result
 
 CodeEngine('maxima', 'maxima', '.mac',
