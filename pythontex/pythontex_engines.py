@@ -1562,7 +1562,7 @@ maxima_template = '''
 # without advancing the numbering on the result labels
 
 maxima_wrapper = '''
-    block(linenum:linenum-1, "{stdoutdelim}\n")$
+    block(linenum:linenum-1, "{stdoutdelim}\n", %)$
     {code}
     '''
 
