@@ -1585,7 +1585,9 @@ def maxima_init():
 
 def maxima_post_processor(input, output):
     inputs = input.split(';')
-    result = '\\begin{maximacodeblock}\n'
+    result = u'\\begin{maximacodeblock}\n'
+    output = re.sub('\\\\pmatrix{([^}]*)}', '\\\\begin{pmatrix}\\1\end{pmatrix}', output)
+    output = output.replace('\cr', '\\\\')
     for line in re.split("\n(?=\(%i([0-9]*)\))", output):
         input_label = re.match("\(%i([0-9]*)\)", line)
         if input_label and re.search('\\\\mbox', line) is not None:
