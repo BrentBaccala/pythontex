@@ -1584,7 +1584,7 @@ def maxima_init():
 # maxima line numbers and output commands are passed to LaTeX command \maximaio
 
 def maxima_post_processor(input, output):
-    inputs = input.split(';')
+    inputs = re.findall('[^;$]*[;$]', input)
     result = u'\\begin{maximacodeblock}\n'
     output = re.sub('\\\\pmatrix{([^}]*)}', '\\\\begin{pmatrix}\\1\end{pmatrix}', output)
     output = output.replace('\cr', '\\\\')
@@ -1593,7 +1593,7 @@ def maxima_post_processor(input, output):
         if input_label and len(inputs) and inputs[0] != '\n':
             result += '\\begin{SaveVerbatim}{MaximaCode}'
             if inputs[0][0] != '\n': result += '\n'
-            result += inputs.pop(0) + ';\n\end{SaveVerbatim}\n'
+            result += inputs.pop(0) + '\n\end{SaveVerbatim}\n'
             result += '\\maximainput{' + input_label.group(1) + '}\n'
             if re.search('\\\\mbox', line) is not None:
                 output_label = re.search("\%o_([0-9]*)", line)
