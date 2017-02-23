@@ -1590,13 +1590,15 @@ def maxima_post_processor(input, output):
     output = output.replace('\cr', '\\\\')
     for line in re.split("\n(?=\(%i([0-9]*)\))", output):
         input_label = re.match("\(%i([0-9]*)\)", line)
-        if input_label and re.search('\\\\mbox', line) is not None:
-            output_label = re.search("\%o_([0-9]*)", line)
-            if output_label and (input_label.group(1) == output_label.group(1)):
-                result += '\\begin{SaveVerbatim}{MaximaCode}'
-                if inputs[0][0] != '\n': result += '\n'
-                result += inputs.pop(0) + ';\n\end{SaveVerbatim}\n'
-                result += '\\maximaio{' + input_label.group(1) + '}{' + line.split('$$')[1] + '}\n'
+        if input_label and len(inputs) and inputs[0] != '\n':
+            result += '\\begin{SaveVerbatim}{MaximaCode}'
+            if inputs[0][0] != '\n': result += '\n'
+            result += inputs.pop(0) + ';\n\end{SaveVerbatim}\n'
+            result += '\\maximainput{' + input_label.group(1) + '}\n'
+            if re.search('\\\\mbox', line) is not None:
+                output_label = re.search("\%o_([0-9]*)", line)
+                if output_label and (input_label.group(1) == output_label.group(1)):
+                    result += '\\maximaoutput{' + output_label.group(1) + '}{' + line.split('$$')[1] + '}\n'
     result += '\\end{maximacodeblock}\n'
     return result
 
