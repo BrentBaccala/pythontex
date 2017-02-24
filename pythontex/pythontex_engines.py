@@ -1584,6 +1584,7 @@ def maxima_init():
 # maxima line numbers and output commands are passed to LaTeX command \maximaio
 
 def maxima_post_processor(input, output):
+    input = re.sub('/\*[^/]*\*/', '', input);
     inputs = re.findall('[^;$]*[;$]', input)
     result = u'\\begin{maximacodeblock}\n'
     output = re.sub('\\\\pmatrix{([^}]*)}', '\\\\begin{pmatrix}\\1\end{pmatrix}', output)
