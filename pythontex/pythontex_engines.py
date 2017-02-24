@@ -1584,11 +1584,26 @@ def maxima_init():
 # maxima line numbers and output commands are passed to LaTeX command \maximaio
 
 def maxima_post_processor(input, output):
+    # Remove any comments in the input text.  They were ignored by
+    # Maxima and are not present in the output.
     input = re.sub('/\*[^/]*\*/', '', input);
+    # Split the input into commands, using Maxima's two command terminators
     inputs = re.findall('[^;$]*[;$]', input)
-    result = u'\\begin{maximacodeblock}\n'
-    output = re.sub('\\\\pmatrix{([^}]*)}', '\\\\begin{pmatrix}\\1\end{pmatrix}', output)
+    # Convert old-style matrices in the output to new style (for package amsmath)
+    while True:
+        match = re.search('\\\\pmatrix{', output)
+        if match:
+            i = match.end()
+            brace_cnt = 1
+            while brace_cnt > 0:
+                if output[i] == '}': brace_cnt -= 1
+                if output[i] == '{': brace_cnt += 1
+                i += 1
+            output = output[:match.start()] + '\\begin{pmatrix}' + output[match.end():i-1] + '\\end{pmatrix}' + output[i:]
+        else: break
     output = output.replace('\cr', '\\\\')
+    # Generate output
+    result = u'\\begin{maximacodeblock}\n'
     for line in re.split("\n(?=\(%i([0-9]*)\))", output):
         input_label = re.match("\(%i([0-9]*)\)", line)
         if input_label and len(inputs) and inputs[0] != '\n':
