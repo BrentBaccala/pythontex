@@ -1610,11 +1610,16 @@ def maxima_post_processor(input, output):
             result += '\\begin{SaveVerbatim}{MaximaCode}'
             if inputs[0][0] != '\n': result += '\n'
             result += inputs.pop(0) + '\n\end{SaveVerbatim}\n'
-            result += '\\maximainput{' + input_label.group(1) + '}\n'
-            if re.search('\\\\mbox', line) is not None:
-                output_label = re.search("\%o_{?([0-9]*)}?", line)
-                if output_label and (input_label.group(1) == output_label.group(1)):
-                    result += '\\maximaoutput{' + output_label.group(1) + '}{' + line.split('$$')[1] + '}\n'
+            result += '\\maximainputlabel{' + input_label.group(1) + '}\n'
+
+            output_label = re.search("\%o_{?([0-9]*)}?", line)
+            if output_label and (input_label.group(1) == output_label.group(1)):
+                result += '\\maximaoutputlabel{' + output_label.group(1) + '}\n';
+            output_blocks = line.split('$$')
+            output_blocks.pop(0);
+            while len(output_blocks) > 0:
+                result += '\\maximaoutput{' + output_blocks.pop(0) + '}\n'
+                output_blocks.pop(0);
     result += '\\end{maximacodeblock}\n'
     return result
 
