@@ -1587,8 +1587,8 @@ def maxima_post_processor(input, output):
     # Remove any comments in the input text.  They were ignored by
     # Maxima and are not present in the output.
     input = re.sub('/\*[^/]*\*/', '', input);
-    # Split the input into commands, using Maxima's two command terminators
-    inputs = re.findall('[^;$]*[;$]', input)
+    # Split the input into Maxima commands
+    inputs = [item[0] for item in re.findall('((:lisp .*)|([^;$]*[;$]))', input)]
     # Convert old-style matrices in the output to new style (for package amsmath)
     while True:
         match = re.search('\\\\pmatrix{', output)
