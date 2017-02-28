@@ -1588,7 +1588,7 @@ def maxima_post_processor(input, output):
     # Maxima and are not present in the output.
     input = re.sub('/\*[^/]*\*/', '', input);
     # Split the input into Maxima commands
-    inputs = [item[0] for item in re.findall('((:lisp .*)|([^;$]*[;$]))', input)]
+    inputs = [item[0] for item in re.findall('(((:lisp .*)|([^;$]*[;$]))\s*)', input)]
     # Convert old-style matrices in the output to new style (for package amsmath)
     while True:
         match = re.search('\\\\pmatrix{', output)
@@ -1606,7 +1606,19 @@ def maxima_post_processor(input, output):
     result = u'\\begin{maximacodeblock}\n'
     for line in re.split("\n(?=\(%i([0-9]*)\))", output):
         input_label = re.match("\(%i([0-9]*)\)", line)
-        if input_label and len(inputs) and inputs[0] != '\n':
+        if input_label:
+            # Lisp commands are problematic because they don't appear
+            # in the output and they don't advance the label number,
+            # so they're really hard to detect.  We look for them
+            # in the input and try to print them in the right place.
+            while len(inputs) and re.match(':lisp', inputs[0]):
+                result += '\\begin{SaveVerbatim}{MaximaCode}'
+                if inputs[0][0] != '\n': result += '\n'
+                result += inputs.pop(0) + '\n\end{SaveVerbatim}\n'
+                result += '\\maximainputlabel{' + input_label.group(1) + '}\n'
+
+            if not (len(inputs) and inputs[0] != '\n'): continue
+
             result += '\\begin{SaveVerbatim}{MaximaCode}'
             if inputs[0][0] != '\n': result += '\n'
             result += inputs.pop(0) + '\n\end{SaveVerbatim}\n'
