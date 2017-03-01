@@ -1603,7 +1603,7 @@ def maxima_post_processor(input, output):
         else: break
     output = output.replace('\cr', '\\\\')
     # Generate output
-    result = u'\\begin{maximacodeblock}\n'
+    result = u''
     for line in re.split("\n(?=\(%i([0-9]*)\))", output):
         input_label = re.match("\(%i([0-9]*)\)", line)
         if input_label:
@@ -1632,7 +1632,6 @@ def maxima_post_processor(input, output):
             while len(output_blocks) > 0:
                 result += '\\maximaoutput{' + output_blocks.pop(0) + '}\n'
                 output_blocks.pop(0);
-    result += '\\end{maximacodeblock}\n'
     return result
 
 CodeEngine('maxima', 'maxima', '.mac',
