@@ -1601,7 +1601,7 @@ def maxima_post_processor(input, output):
                 i += 1
             output = output[:match.start()] + '\\begin{pmatrix}' + output[match.end():i-1] + '\\end{pmatrix}' + output[i:]
         else: break
-    output = output.replace('\cr', '\\\\')
+    output = output.replace('\\cr', '\\\\')
     # Generate output
     result = u''
     for line in re.split("\n(?=\(%i([0-9]*)\))", output):
