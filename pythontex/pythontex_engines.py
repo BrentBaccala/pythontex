@@ -1572,21 +1572,60 @@ import inspect
 
 def maxima_init():
     outputdir = inspect.currentframe(1).f_locals["outputdir"]
+    lispfile = open("{}/maxima-bwb-init.lisp".format(outputdir), "w")
+    lispfile.write('''
+(defun tex-mlabel (x l r)
+  (tex (caddr x)
+       (append l
+               (if (cadr x)
+                   (list (format nil "\\\\maximaoutputlabel{~A}" (subseq (symbol-name (tex-stripdollar0 (cadr x))) 4)))
+                   nil))
+       r 'mparen 'mparen))
+
+;; redefine these functions to get function and macro definitions the way we want them
+
+(setf (get 'mdefine 'tex-environment)
+      `(,(format nil "~%\\\\maximaoutputmath{") . ,(format nil "}~%")))
+
+(setf (get 'mdefmacro 'tex-environment)
+      `(,(format nil "~%\\\\maximaoutputmath{") . ,(format nil "}~%")))
+
+(defun tex-string (x)
+  (cond ((equal x "") "")
+        ((eql (elt x 0) #\\\\) x)
+        (t (concatenate 'string "\\\\maximaoutputstring{ " x " }"))))
+''')
+    lispfile.close()
     initfile = open("{}/maxima-init.mac".format(outputdir), "w")
-    initfile.write('load("alt-display.mac")$\n')
-    initfile.write('set_alt_display(2,tex_display)$\n')
-    initfile.write('batch("{}/maxima_default_default.mac")$\n'.format(outputdir))
-    initfile.write('quit()$\n')
+    initfile.write('''
+load("alt-display.mac")$
+load("{0}/maxima-bwb-init.lisp")$
+set_alt_display(2,tex_display)$
+set_tex_environment_default("\\\\maximaoutputmath{{", "}}")$
+batch("{0}/maxima_default_default.mac")$
+quit()$
+'''.format(outputdir))
     initfile.close()
     return
 
 # maxima input commands are saved in a verbatim environment named MaximaCode
 # maxima line numbers and output commands are passed to LaTeX command \maximaio
 
+# given a string and the index of a left brace, return the index of the matching right brace
+
+def match_braces(string, i):
+    brace_cnt = 1
+    i += 1
+    while brace_cnt > 0:
+        if string[i] == '}': brace_cnt -= 1
+        if string[i] == '{': brace_cnt += 1
+        i += 1
+    return i-1
+
 def maxima_post_processor(input, output):
     # Remove any comments in the input text.  They were ignored by
     # Maxima and are not present in the output.
-    input = re.sub('/\*[^/]*\*/', '', input);
+    input = re.sub('/\*.*\*/', '', input);
     # Split the input into Maxima commands
     inputs = [item[0] for item in re.findall('(((:lisp .*)|([^;$]*[;$]))\s*)', input)]
     # Convert old-style matrices in the output to new style (for package amsmath)
@@ -1604,9 +1643,10 @@ def maxima_post_processor(input, output):
     output = output.replace('\\cr', '\\\\')
     # Generate output
     result = u''
-    for line in re.split("\n(?=\(%i([0-9]*)\))", output):
-        input_label = re.match("\(%i([0-9]*)\)", line)
-        if input_label:
+    for match in re.finditer("(\(%i([0-9]*)\))|(\\\\maximaoutput\w*)", output):
+        if match.group(1):
+            # Input label
+
             # Lisp commands are problematic because they don't appear
             # in the output and they don't advance the label number,
             # so they're really hard to detect.  We look for them
@@ -1615,23 +1655,19 @@ def maxima_post_processor(input, output):
                 result += '\\begin{SaveVerbatim}{MaximaCode}'
                 if inputs[0][0] != '\n': result += '\n'
                 result += inputs.pop(0) + '\n\end{SaveVerbatim}\n'
-                result += '\\maximainputlabel{' + input_label.group(1) + '}\n'
+                result += '\\maximainputlabel{' + match.group(2) + '}\n'
 
             if not (len(inputs) and inputs[0] != '\n'): continue
 
             result += '\\begin{SaveVerbatim}{MaximaCode}'
             if inputs[0][0] != '\n': result += '\n'
             result += inputs.pop(0) + '\n\end{SaveVerbatim}\n'
-            result += '\\maximainputlabel{' + input_label.group(1) + '}\n'
+            result += '\\maximainputlabel{' + match.group(2) + '}\n'
 
-            output_label = re.search("\%o_{?([0-9]*)}?", line)
-            if output_label and (input_label.group(1) == output_label.group(1)):
-                result += '\\maximaoutputlabel{' + output_label.group(1) + '}\n';
-            output_blocks = line.split('$$')
-            output_blocks.pop(0);
-            while len(output_blocks) > 0:
-                result += '\\maximaoutput{' + output_blocks.pop(0) + '}\n'
-                output_blocks.pop(0);
+        if match.group(3):
+            # Output object
+            result += output[match.start(3) : match_braces(output, match.end(3))+1]
+
     return result
 
 CodeEngine('maxima', 'maxima', '.mac',
