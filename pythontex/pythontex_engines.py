@@ -1608,6 +1608,22 @@ def maxima_init():
     initfile.write('''
 load("alt-display.mac")$
 load("{0}/maxima-bwb-init.lisp")$
+/* This version of define_alt_display doesn't turn off the simplifier.
+ * I don't know why the original alt-display.mac version of the code does.
+ */
+define_alt_display(f,body) ::= buildq(
+  [f:f,
+  body:psubst([
+    alt_display1d='?\*alt\-display1d\*,
+    alt_display2d='?\*alt\-display2d\*,
+    prompt_prefix='?\*prompt\-prefix\*,
+    prompt_suffix='?\*prompt\-suffix\*,
+    displa='?displa,
+    linear_displa='?linear\-displa
+    ],
+    body)],
+  f := block(body));
+define_alt_display(tex_display(x),block([alt_display1d:false,alt_display2d:false],printf(true,"~a",tex_displa(x))));
 set_alt_display(2,tex_display)$
 set_tex_environment_default("\\\\maximaoutputmath{{", "}}")$
 batch("{0}/maxima_default_default.mac")$
