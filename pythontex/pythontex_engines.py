@@ -1570,6 +1570,13 @@ maxima_sub = '''"\n{field_delim}\n"$ {field}'''
 
 import inspect
 
+# Initialize Maxima to redefine the way it does output to use LaTeX tags
+#
+# Output line labels are put in a \maximaoutputlabel{}
+# Output math is put in \maximaoutputmath{}
+# Output strings are saved in a verbatim block called MaximaString
+#    and then \maximaoutputstring is called
+
 def maxima_init():
     outputdir = inspect.currentframe(1).f_locals["outputdir"]
     lispfile = open("{}/maxima-bwb-init.lisp".format(outputdir), "w")
@@ -1593,7 +1600,8 @@ def maxima_init():
 (defun tex-string (x)
   (cond ((equal x "") "")
         ((eql (elt x 0) #\\\\) x)
-        (t (concatenate 'string "\\\\maximaoutputstring{ " x " }"))))
+        (t (concatenate 'string (format nil "\\\\begin{SaveVerbatim}{MaximaString}~%")
+                        x (format nil "~%\\\\end{SaveVerbatim}~%\\\\maximaoutputstring")))))
 ''')
     lispfile.close()
     initfile = open("{}/maxima-init.mac".format(outputdir), "w")
@@ -1607,9 +1615,6 @@ quit()$
 '''.format(outputdir))
     initfile.close()
     return
-
-# maxima input commands are saved in a verbatim environment named MaximaCode
-# maxima line numbers and output commands are passed to LaTeX command \maximaio
 
 # given a string and the index of a left brace, return the index of the matching right brace
 
@@ -1643,19 +1648,37 @@ def maxima_post_processor(input, output):
     output = output.replace('\\cr', '\\\\')
     # Generate output
     result = u''
-    for match in re.finditer("(\(%i([0-9]*)\))|(\\\\maximaoutput\w*)", output):
+    for match in re.finditer("(\(%i([0-9]*)\))|(\\\\maximaoutput\w*)|(\\\\begin\{SaveVerbatim\}[^|]*?\\\\maximaoutputstring)", output):
         if match.group(1):
             # Input label
 
-            # Lisp commands are problematic because they don't appear
+            # I haven't gotten Maxima to print input labels the
+            # way I want, so this code is klunky because it
+            # reformats the output a lot.
+
+            # Maxima input doesn't get reprinted verbatim, so
+            # I save the input and use the saved copy instead
+            # of what appears in the output.
+
+            # Input commands are saved in a verbatim block
+            # called MaximaCode, then \maximainputlabel{}
+            # is called, with the input label number passed in.
+
+            # LISP commands are problematic because they don't appear
             # in the output and they don't advance the label number,
-            # so they're really hard to detect.  We look for them
-            # in the input and try to print them in the right place.
+            # so they're really hard to detect.  When we reach a
+            # Maxima input label, we print any LISP commands that
+            # are at the top of the input buffer
+
+            # Print any LISP commands
+
             while len(inputs) and re.match(':lisp', inputs[0]):
                 result += '\\begin{SaveVerbatim}{MaximaCode}'
                 if inputs[0][0] != '\n': result += '\n'
                 result += inputs.pop(0) + '\n\end{SaveVerbatim}\n'
                 result += '\\maximainputlabel{' + match.group(2) + '}\n'
+
+            # Print an actual Maxima command
 
             if not (len(inputs) and inputs[0] != '\n'): continue
 
@@ -1665,8 +1688,11 @@ def maxima_post_processor(input, output):
             result += '\\maximainputlabel{' + match.group(2) + '}\n'
 
         if match.group(3):
-            # Output object
+            # Output object with a trailing argument
             result += output[match.start(3) : match_braces(output, match.end(3))+1]
+        if match.group(4):
+            # Output object with no trailing argument
+            result += output[match.start(4) : match.end(4)+1]
 
     return result
 
