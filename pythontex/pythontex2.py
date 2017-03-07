@@ -73,6 +73,11 @@ else:
     import pickle
 
 
+try:
+    WindowsError
+except NameError:
+    WindowsError = None
+
 
 
 # Script parameters
