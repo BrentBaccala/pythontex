@@ -1555,14 +1555,14 @@ SubCodeEngine('rust', 'rs')
 
 maxima_template = '''
     {body}
-    "\n{dependencies_delim}\n{created_delim}\n"$
+    ?princ("\n{dependencies_delim}\n{created_delim}\n")$
     '''
 
 # The rationale behind this block() command is to insert {stdoutdelim}
 # without advancing the numbering on the result labels
 
 maxima_wrapper = '''
-    block(linenum:linenum-1, "{stdoutdelim}\n", %)$
+    block(linenum:linenum-1, ?princ("{stdoutdelim}\n"), %)$
     {code}
     '''
 
@@ -1597,11 +1597,30 @@ def maxima_init():
 (setf (get 'mdefmacro 'tex-environment)
       `(,(format nil "~%\\\\maximaoutputmath{") . ,(format nil "}~%")))
 
+;; mgrind is called from linear-displa, which is called from displa,
+;; which is called from continue (the main loop) to print the input
+;; when batch-or-demo-flag is set.  I don't want that behavior, since
+;; the input has already been parsed into LISP structures, and
+;; probably won't print back out just the way it was input.
+;;
+;; Instead, just print the input tag and we'll munge it later
+;; in maxima_post_processor()
+;;
+;; original code (from src/grind.lisp):
+;;
+;; (defun mgrind (x out)
+;;  (setq chrps 0)
+;;  (mprint (msize x nil nil 'mparen 'mparen) out))
+
+(defun mgrind (x out)
+  (setq chrps 0)
+  (cond ((eq (caar x) 'MLABEL) (princ (cadr x)))
+        (t (mprint (msize x nil nil 'mparen 'mparen) out))))
+
 (defun tex-string (x)
-  (cond ((equal x "") "")
-        ((eql (elt x 0) #\\\\) x)
-        (t (concatenate 'string (format nil "\\\\begin{SaveVerbatim}{MaximaString}~%")
-                        x (format nil "~%\\\\end{SaveVerbatim}~%\\\\maximaoutputstring")))))
+  (concatenate 'string (format nil "\\\\begin{SaveVerbatim}{MaximaString}~%")
+               x (format nil "~%\\\\end{SaveVerbatim}~%\\\\maximaoutputstring")))
+
 ''')
     lispfile.close()
     initfile = open("{}/maxima-init.mac".format(outputdir), "w")
@@ -1625,6 +1644,7 @@ define_alt_display(f,body) ::= buildq(
   f := block(body));
 define_alt_display(tex_display(x),block([alt_display1d:false,alt_display2d:false],printf(true,"~a",tex_displa(x))));
 set_alt_display(2,tex_display)$
+/* set_alt_display(2, lambda([form], tex(?caddr(form))))$ */
 set_tex_environment_default("\\\\maximaoutputmath{{", "}}")$
 batch("{0}/maxima_default_default.mac")$
 quit()$
@@ -1664,7 +1684,7 @@ def maxima_post_processor(input, output):
     output = output.replace('\\cr', '\\\\')
     # Generate output
     result = u''
-    for match in re.finditer("(\(%i([0-9]*)\))|(\\\\maximaoutput\w*)|(\\\\begin\{SaveVerbatim\}[^|]*?\\\\maximaoutputstring)", output):
+    for match in re.finditer("(\$%I([0-9]*))|(\\\\maximaoutput\w*)|(\\\\begin\{SaveVerbatim\}[^|]*?\\\\maximaoutputstring)", output):
         if match.group(1):
             # Input label
 
