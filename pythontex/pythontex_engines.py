@@ -1603,8 +1603,9 @@ def maxima_init():
 ;; the input has already been parsed into LISP structures, and
 ;; probably won't print back out just the way it was input.
 ;;
-;; Instead, just print the input tag and we'll munge it later
-;; in maxima_post_processor()
+;; Instead, ignore the input tag and print $linenum in a \maximainputlabel
+;;
+;; We'll munge it more later in maxima_post_processor()
 ;;
 ;; original code (from src/grind.lisp):
 ;;
@@ -1614,8 +1615,16 @@ def maxima_init():
 
 (defun mgrind (x out)
   (setq chrps 0)
-  (cond ((eq (caar x) 'MLABEL) (princ (cadr x)))
+  (cond ((eq (caar x) 'MLABEL) (princ "\\\\maximainputlabel{") (princ $linenum) (princ "}"))
         (t (mprint (msize x nil nil 'mparen 'mparen) out))))
+
+;; mtell is used for warning messages
+;; merror is used for error messages
+;;
+;; for now, just silence them
+
+(defmfun mtell (&rest l))
+(defun merror (sstring &rest l))
 
 (defun tex-string (x)
   (concatenate 'string (format nil "\\\\begin{SaveVerbatim}{MaximaString}~%")
@@ -1684,51 +1693,44 @@ def maxima_post_processor(input, output):
     output = output.replace('\\cr', '\\\\')
     # Generate output
     result = u''
-    for match in re.finditer("(\$%I([0-9]*))|(\\\\maximaoutput\w*)|(\\\\begin\{SaveVerbatim\}[^|]*?\\\\maximaoutputstring)", output):
-        if match.group(1):
-            # Input label
+    list = re.split("(\\\\maximainputlabel{[0-9]+})", output)
+    for data, inputlabel in zip(list[0::2], list[1::2]):
 
-            # I haven't gotten Maxima to print input labels the
-            # way I want, so this code is klunky because it
-            # reformats the output a lot.
+        result += data
 
-            # Maxima input doesn't get reprinted verbatim, so
-            # I save the input and use the saved copy instead
-            # of what appears in the output.
+        # Input labels
 
-            # Input commands are saved in a verbatim block
-            # called MaximaCode, then \maximainputlabel{}
-            # is called, with the input label number passed in.
+        # Maxima input doesn't get reprinted verbatim, so
+        # I save the input and use the saved copy instead
+        # of what appears in the output.
 
-            # LISP commands are problematic because they don't appear
-            # in the output and they don't advance the label number,
-            # so they're really hard to detect.  When we reach a
-            # Maxima input label, we print any LISP commands that
-            # are at the top of the input buffer
+        # Input commands are saved in a verbatim block
+        # called MaximaCode, then \maximainputlabel{}
+        # is called, with the input label number passed in.
 
-            # Print any LISP commands
+        # LISP commands are problematic because they don't appear
+        # in the output and they don't advance the label number,
+        # so they're really hard to detect.  When we reach a
+        # Maxima input label, we print any LISP commands that
+        # are at the top of the input buffer, then a single
+        # Maxima command.
 
-            while len(inputs) and re.match(':lisp', inputs[0]):
-                result += '\\begin{SaveVerbatim}{MaximaCode}'
-                if inputs[0][0] != '\n': result += '\n'
-                result += inputs.pop(0) + '\n\end{SaveVerbatim}\n'
-                result += '\\maximainputlabel{' + match.group(2) + '}\n'
+        # Print any LISP commands
 
-            # Print an actual Maxima command
-
-            if not (len(inputs) and inputs[0] != '\n'): continue
-
+        while len(inputs) and re.match(':lisp', inputs[0]):
             result += '\\begin{SaveVerbatim}{MaximaCode}'
             if inputs[0][0] != '\n': result += '\n'
             result += inputs.pop(0) + '\n\end{SaveVerbatim}\n'
-            result += '\\maximainputlabel{' + match.group(2) + '}\n'
+            result += inputlabel
 
-        if match.group(3):
-            # Output object with a trailing argument
-            result += output[match.start(3) : match_braces(output, match.end(3))+1]
-        if match.group(4):
-            # Output object with no trailing argument
-            result += output[match.start(4) : match.end(4)+1]
+        # Print an actual Maxima command
+
+        if not (len(inputs) and inputs[0] != '\n'): continue
+
+        result += '\\begin{SaveVerbatim}{MaximaCode}'
+        if inputs[0][0] != '\n': result += '\n'
+        result += inputs.pop(0) + '\n\end{SaveVerbatim}\n'
+        result += inputlabel
 
     return result
 
