@@ -1589,6 +1589,10 @@ def maxima_init():
                    nil))
        r 'mparen 'mparen))
 
+(defun tex-string (x)
+  (concatenate 'string (format nil "\\\\begin{SaveVerbatim}{MaximaString}~%")
+               x (format nil "~%\\\\end{SaveVerbatim}~%\\\\maximaoutputstring")))
+
 ;; redefine these functions to get function and macro definitions the way we want them
 
 (setf (get 'mdefine 'tex-environment)
@@ -1625,10 +1629,6 @@ def maxima_init():
 
 (defmfun mtell (&rest l))
 (defun merror (sstring &rest l))
-
-(defun tex-string (x)
-  (concatenate 'string (format nil "\\\\begin{SaveVerbatim}{MaximaString}~%")
-               x (format nil "~%\\\\end{SaveVerbatim}~%\\\\maximaoutputstring")))
 
 ''')
     lispfile.close()
@@ -1673,12 +1673,25 @@ def match_braces(string, i):
     return i-1
 
 def maxima_post_processor(input, output):
+
+    # Maxima input doesn't get reprinted verbatim, so we disable input
+    # echoing (by redefining mgrind above), save the actual input and
+    # use the saved copy instead.  Some pre-processing is required.
+
     # Remove any comments in the input text.  They were ignored by
     # Maxima and are not present in the output.
+
     input = re.sub('/\*.*\*/', '', input);
-    # Split the input into Maxima commands
-    inputs = [item[0] for item in re.findall('(((:lisp .*)|([^;$]*[;$]))\s*)', input)]
+
+    # Split the input into commands (two kinds)
+    #
+    # 1. LISP commands are on a single line starting with :lisp or :lisp-quiet
+    # 2. Maxima commands can be spread over multiple lines and are terminated by ; or $
+
+    inputs = [item[0] for item in re.findall('(((:lisp.*)|([^;$]*[;$]))\s*)', input)]
+
     # Convert old-style matrices in the output to new style (for package amsmath)
+
     while True:
         match = re.search('\\\\pmatrix{', output)
         if match:
@@ -1691,7 +1704,10 @@ def maxima_post_processor(input, output):
             output = output[:match.start()] + '\\begin{pmatrix}' + output[match.end():i-1] + '\\end{pmatrix}' + output[i:]
         else: break
     output = output.replace('\\cr', '\\\\')
-    # Generate output
+
+    # Search through the output for \maximainputlabel's and insert the
+    # actual input just before each \maximainputlabel
+
     result = u''
     list = re.split("(\\\\maximainputlabel{[0-9]+})", output)
     for data, inputlabel in zip(list[0::2], list[1::2]):
@@ -1699,10 +1715,6 @@ def maxima_post_processor(input, output):
         result += data
 
         # Input labels
-
-        # Maxima input doesn't get reprinted verbatim, so
-        # I save the input and use the saved copy instead
-        # of what appears in the output.
 
         # Input commands are saved in a verbatim block
         # called MaximaCode, then \maximainputlabel{}
