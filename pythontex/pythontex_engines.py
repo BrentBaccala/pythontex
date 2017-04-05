@@ -1579,7 +1579,7 @@ import inspect
 
 def maxima_init():
     outputdir = inspect.currentframe(1).f_locals["outputdir"]
-    lispfile = open("{}/maxima-bwb-init.lisp".format(outputdir), "w")
+    lispfile = open("{}/maxima-init.lisp".format(outputdir), "w")
     lispfile.write('''
 (defun tex-mlabel (x l r)
   (tex (caddr x)
@@ -1635,7 +1635,7 @@ def maxima_init():
     initfile = open("{}/maxima-init.mac".format(outputdir), "w")
     initfile.write('''
 load("alt-display.mac")$
-load("{0}/maxima-bwb-init.lisp")$
+load("{0}/maxima-init.lisp")$
 /* This version of define_alt_display doesn't turn off the simplifier.
  * I don't know why the original alt-display.mac version of the code does.
  */
