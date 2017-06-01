@@ -1628,7 +1628,7 @@ def maxima_init():
 ;; for now, just silence them
 
 (defmfun mtell (&rest l))
-(defun merror (sstring &rest l))
+;; (defun merror (sstring &rest l))
 
 ''')
     lispfile.close()
