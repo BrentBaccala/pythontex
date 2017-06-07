@@ -1678,10 +1678,14 @@ def maxima_post_processor(input, output):
     # echoing (by redefining mgrind above), save the actual input and
     # use the saved copy instead.  Some pre-processing is required.
 
-    # Remove any comments in the input text.  They were ignored by
-    # Maxima and are not present in the output.
+    # Remove any comments in the input text, because they interfere
+    # with separating the input into command.
 
-    input = re.sub('/\*.*\*/', '', input);
+    comments=[]
+    def removecomment(x):
+       comments.append(x.group(0))
+       return '/**/'
+    input = re.sub('/\*.*\*/', removecomment, input);
 
     # Split the input into commands (two kinds)
     #
@@ -1689,6 +1693,13 @@ def maxima_post_processor(input, output):
     # 2. Maxima commands can be spread over multiple lines and are terminated by ; or $
 
     inputs = [item[0] for item in re.findall('(((:lisp.*)|([^;$]*[;$]))\s*)', input)]
+
+    # Put the comments back in
+
+    def addcomment(x):
+       return re.sub('/\*\*/', lambda y: comments.pop(0), x)
+
+    inputs = map(addcomment, inputs)
 
     # Convert old-style matrices in the output to new style (for package amsmath)
 
