@@ -1292,7 +1292,6 @@ def do_multiprocessing(data, temp_data, old_data, engine_dict):
                                                  engine_dict[family].linenumbers,
                                                  engine_dict[family].lookbehind,
                                                  engine_dict[family].init,
-                                                 engine_dict[family].pre_processor,
                                                  engine_dict[family].post_processor,
                                                  keeptemps, hashdependencies)'''
         tasks.append(pool.apply_async(run_code, [encoding, outputdir,
@@ -1308,7 +1307,6 @@ def do_multiprocessing(data, temp_data, old_data, engine_dict):
                                                  engine_dict[family].linenumbers,
                                                  engine_dict[family].lookbehind,
                                                  engine_dict[family].init,
-                                                 engine_dict[family].pre_processor,
                                                  engine_dict[family].post_processor,
                                                  keeptemps, hashdependencies]))
         if verbose:
@@ -1486,7 +1484,7 @@ def do_multiprocessing(data, temp_data, old_data, engine_dict):
 def run_code(encoding, outputdir, workingdir, code_list, language, commands,
              command_created, extension, makestderr, stderrfilename,
              code_index, errorsig, warningsig, linesig, stderrlookbehind,
-             init, pre_processor, post_processor, keeptemps, hashdependencies):
+             init, post_processor, keeptemps, hashdependencies):
     '''
     Function for multiprocessing code files
     '''
@@ -1632,8 +1630,6 @@ def run_code(encoding, outputdir, workingdir, code_list, language, commands,
                 else:
                     dependencies[dep] = (os.path.getmtime(dep_file), '')
 
-            if callable(pre_processor):
-                out = pre_processor(out)
             for block in out.split('=>PYTHONTEX:STDOUT#')[1:]:
                 if block:
                     try:
