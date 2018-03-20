@@ -13,7 +13,7 @@ should be in the same directory.
 
 Licensed under the BSD 3-Clause License:
 
-Copyright (c) 2012-2016, Geoffrey M. Poore
+Copyright (c) 2012-2017, Geoffrey M. Poore
 
 All rights reserved.
 
@@ -82,7 +82,7 @@ except NameError:
 
 # Script parameters
 # Version
-__version__ = '0.16dev'
+__version__ = '0.17dev'
 
 
 
@@ -1293,7 +1293,8 @@ def do_multiprocessing(data, temp_data, old_data, engine_dict):
                                                  engine_dict[family].lookbehind,
                                                  engine_dict[family].init,
                                                  engine_dict[family].post_processor,
-                                                 keeptemps, hashdependencies)'''
+                                                 keeptemps, hashdependencies,
+                                                 pygments_settings)'''
         tasks.append(pool.apply_async(run_code, [encoding, outputdir,
                                                  workingdir, code_dict[key],
                                                  engine_dict[family].language,
@@ -1308,7 +1309,8 @@ def do_multiprocessing(data, temp_data, old_data, engine_dict):
                                                  engine_dict[family].lookbehind,
                                                  engine_dict[family].init,
                                                  engine_dict[family].post_processor,
-                                                 keeptemps, hashdependencies]))
+                                                 keeptemps, hashdependencies,
+                                                 pygments_settings]))
         if verbose:
             print('    - Code process ' + key.replace('#', ':'))
 
@@ -1484,7 +1486,7 @@ def do_multiprocessing(data, temp_data, old_data, engine_dict):
 def run_code(encoding, outputdir, workingdir, code_list, language, commands,
              command_created, extension, makestderr, stderrfilename,
              code_index, errorsig, warningsig, linesig, stderrlookbehind,
-             init, post_processor, keeptemps, hashdependencies):
+             init, post_processor, keeptemps, hashdependencies, pygments_settings):
     '''
     Function for multiprocessing code files
     '''
@@ -1537,7 +1539,10 @@ def run_code(encoding, outputdir, workingdir, code_list, language, commands,
             exec_cmd = shlex.split(bytes(command.format(file=script.replace('\\', '\\\\'), File=script_full.replace('\\', '\\\\'), workingdir=workingdir.replace('\\', '\\\\'), outputdir=outputdir)))
             exec_cmd = [unicode(elem) for elem in exec_cmd]
         else:
-            exec_cmd = shlex.split(command.format(file=script.replace('\\', '\\\\'), File=script_full.replace('\\', '\\\\'), workingdir=workingdir.replace('\\', '\\\\'), outputdir=outputdir))
+            if family != 'juliacon':
+                exec_cmd = shlex.split(command.format(file=script.replace('\\', '\\\\'), File=script_full.replace('\\', '\\\\'), workingdir=workingdir.replace('\\', '\\\\'), outputdir=outputdir))
+            else:
+                exec_cmd = shlex.split(command.format(file=script.replace('\\', '/'), File=script_full.replace('\\', '/'), workingdir=workingdir.replace('\\', '/'), outputdir=outputdir))
         # Add any created files due to the command
         # This needs to be done before attempts to execute, to prevent orphans
         try:
@@ -1574,6 +1579,22 @@ def run_code(encoding, outputdir, workingdir, code_list, language, commands,
         messages.append('    Missing output file for ' + key_run.replace('#', ':'))
         errors += 1
     else:
+        if family == 'juliacon':
+            with open(out_file_name.rsplit('.', 1)[0] + '.tex', 'r', encoding=encoding) as f:
+                tex_data_lines = f.readlines()
+            inst = 0
+            for n, line in enumerate(tex_data_lines):
+                if line.rstrip() == '\\begin{juliaterm}':
+                    tex_data_lines[n] = '=>PYTHONTEX:STDOUT#{0}#code#\n'.format(inst)
+                    inst += 1
+                    if n != 0:
+                        tex_data_lines[n-1] = ''
+                if line.rstrip() == '\\end{juliaterm}':
+                    tex_data_lines[n] = ''
+            tex_data_lines.append('=>PYTHONTEX:DEPENDENCIES#\n=>PYTHONTEX:CREATED#\n')
+            with open(out_file_name, 'w', encoding=encoding) as f:
+                f.write(''.join(tex_data_lines))
+
         f = open(out_file_name, 'r', encoding=encoding)
         out = f.read()
         f.close()
@@ -1630,6 +1651,18 @@ def run_code(encoding, outputdir, workingdir, code_list, language, commands,
                 else:
                     dependencies[dep] = (os.path.getmtime(dep_file), '')
 
+            if family == 'juliacon':
+                from pygments import highlight
+                from pygments.lexers import get_lexer_by_name
+                from pygments.formatters import LatexFormatter
+                formatter = dict()
+                lexer = dict()
+                for codetype in pygments_settings:
+                    if codetype != ':GLOBAL':
+                        p = pygments_settings[codetype]['formatter_options'].copy()
+                        p['commandprefix'] = 'PYG'
+                        formatter[codetype] = LatexFormatter(**p)
+                        lexer[codetype] = get_lexer_by_name(pygments_settings[codetype]['lexer'], **p)
             for block in out.split('=>PYTHONTEX:STDOUT#')[1:]:
                 if block:
                     try:
@@ -1673,6 +1706,8 @@ def run_code(encoding, outputdir, workingdir, code_list, language, commands,
                                     content = content.rsplit('\n', 1)[0] + '\\endinput\n'
                             if callable(post_processor):
                                 content = post_processor(code_list[int(instance)].code, content)
+                            if family == 'juliacon':
+                                content = highlight(content, lexer[family], formatter[family])
                             f.write(content)
                             f.close()
                             files.append(fname)
@@ -1682,6 +1717,8 @@ def run_code(encoding, outputdir, workingdir, code_list, language, commands,
         messages.append('* PythonTeX error')
         messages.append('    Missing stderr file for ' + key_run.replace('#', ':'))
         errors += 1
+    elif family == 'juliacon':
+        pass
     else:
         # Open error and code files.
         f = open(err_file_name, encoding=encoding)
@@ -2432,7 +2469,10 @@ def python_console(jobname, encoding, outputdir, workingdir, fvextfile,
             sys.excepthook = sys.__excepthook__
             old_stdout = sys.stdout
             sys.stdout = self.iostdout
-            self.interact(self.banner)
+            if sys.version_info.major == 3 and sys.version_info.minor >= 6:
+                self.interact(self.banner, exitmsg='')
+            else:
+                self.interact(self.banner)
             sys.stdout = old_stdout
             self.session_log = self.iostdout.getvalue()
 

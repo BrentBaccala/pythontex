@@ -17,7 +17,7 @@ document (script for execution).
 
 
 
-Copyright (c) 2012-2016, Geoffrey M. Poore
+Copyright (c) 2012-2017, Geoffrey M. Poore
 All rights reserved.
 Licensed under the BSD 3-Clause License:
     http://www.opensource.org/licenses/BSD-3-Clause
@@ -995,8 +995,8 @@ julia_template = '''
         function JuliaTeXUtils()
             self = new()
             self.self = self
-            self._dependencies = Array(AbstractString, 0)
-            self._created = Array(AbstractString, 0)
+            self._dependencies = Array{{AbstractString}}(0)
+            self._created = Array{{AbstractString}}(0)
             self._context_raw = ""
 
             function formatter(expr)
@@ -1123,6 +1123,12 @@ CodeEngine('julia', 'julia', '.jl', '{julia} "{file}.jl"', julia_template,
               'ERROR:', 'WARNING:', ':{number}', True)
 
 SubCodeEngine('julia', 'jl')
+
+
+CodeEngine('juliacon', 'julia', '.jl', '{julia} -e "using Weave; weave(\\"{File}.jl\\", \\"tex\\")"', '{body}\n',
+           '#+ term=true\n{code}\n', '', '',
+           'ERROR:', 'WARNING:', ':{number}', True, created='{File}.tex')
+
 
 
 
