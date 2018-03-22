@@ -1579,8 +1579,8 @@ import inspect
 #    and then \maximaoutputstring is called
 
 def maxima_init():
-    outputdir = inspect.currentframe(1).f_locals["outputdir"]
-    lispfile = open("{}/maxima-init.lisp".format(outputdir), "w")
+    script = inspect.currentframe(1).f_locals["script"]
+    lispfile = open("{}.lisp".format(script), "w")
     lispfile.write('''
 (defun tex-mlabel (x l r)
   (tex (caddr x)
@@ -1633,10 +1633,10 @@ def maxima_init():
 
 ''')
     lispfile.close()
-    initfile = open("{}/maxima-init.mac".format(outputdir), "w")
+    initfile = open("{}.init".format(script), "w")
     initfile.write('''
 load("alt-display.mac")$
-load("{0}/maxima-init.lisp")$
+load("{0}.lisp")$
 /* This version of define_alt_display doesn't turn off the simplifier.
  * I don't know why the original alt-display.mac version of the code does.
  */
@@ -1656,9 +1656,9 @@ define_alt_display(tex_display(x),block([alt_display1d:false,alt_display2d:false
 set_alt_display(2,tex_display)$
 /* set_alt_display(2, lambda([form], tex(?caddr(form))))$ */
 set_tex_environment_default("\\\\maximaoutputmath{{", "}}")$
-batch("{0}/maxima_default_default.mac")$
+batch("{0}.mac")$
 quit()$
-'''.format(outputdir))
+'''.format(script))
     initfile.close()
     return
 
@@ -1717,6 +1717,10 @@ def maxima_post_processor(input, output):
         else: break
     output = output.replace('\\cr', '\\\\')
 
+    # Escape any TeX specials (# - macro character)
+
+    output = output.replace('#', '\\#')
+
     # Search through the output for \maximainputlabel's and insert the
     # actual input just before each \maximainputlabel
 
@@ -1759,7 +1763,7 @@ def maxima_post_processor(input, output):
     return result
 
 CodeEngine('maxima', 'maxima', '.mac',
-           '{maxima} --init-mac="{outputdir}/maxima-init.mac"',
+           '{maxima} --init-mac="{file}.init"',
            maxima_template, maxima_wrapper, '{code}', maxima_sub,
            ['error', 'Error'], ['warning', 'Warning'],
            'line {number}',
