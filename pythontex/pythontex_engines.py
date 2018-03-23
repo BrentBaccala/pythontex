@@ -1721,6 +1721,12 @@ def maxima_post_processor(input, output):
 
     output = output.replace('#', '\\#')
 
+    # ARRSTORE messages are a problem because they include a '$' character
+    # I don't want to escape all $'s, because sometimes I want to write
+    # maxima code that outputs them deliberately.
+
+    output = re.subn(r'ARRSTORE:[^\n]*\n', '', output)[0]
+
     # Search through the output for \maximainputlabel's and insert the
     # actual input just before each \maximainputlabel
 
