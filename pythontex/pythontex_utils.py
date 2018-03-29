@@ -17,6 +17,7 @@ Licensed under the BSD 3-Clause License:
 # Imports
 import sys
 import warnings
+import re
 if sys.version_info.major == 2:
     import io
 
@@ -390,8 +391,25 @@ class PythonTeXUtils(object):
         pass
     def after(self):
         pass
-    
-    
+
+    def code(self, codestr):
+        exec("from __main__ import *") in globals()
+        for command in re.split(r'\n(?=\S)', codestr):
+            if not re.match(r'^\s*$', command) and not re.match(r'^#', command):
+                print('\\begin{SaveVerbatim}{SageCode}')
+                print(command.rstrip())
+                print('\\end{SaveVerbatim}\n\\sageinputcode')
+                if re.match(r'^\w*\s*=', command):
+                    exec(preparse(command)) in globals()
+                else:
+                    try:
+                        output = eval(preparse('latex('+command+')'), globals())
+                        print('\\sageoutputmath{')
+                        print(output)
+                        print('}\n')
+                    except SyntaxError:
+                        exec(preparse(command)) in globals()
+
     # We need a way to keep track of dependencies
     # We create a list that stores specified dependencies, and a method that
     # adds dependencies to the list.  The contents of this list must be 

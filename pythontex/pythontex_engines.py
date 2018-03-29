@@ -812,8 +812,27 @@ SubCodeEngine('python', 'py')
 SubCodeEngine('python', 'pylab', extend='from pylab import *')
 
 
+sage_wrapper = '''
+    pytex.command = '{command}'
+    pytex.set_context('{context}')
+    pytex.args = '{args}'
+    pytex.instance = '{instance}'
+    pytex.line = '{line}'
+
+    print('{stdoutdelim}')
+    sys.stderr.write('{stderrdelim}\\n')
+    pytex.before()
+
+    pytex.code("""
+    {code}
+    """)
+
+    pytex.after()
+    '''
+
 SubCodeEngine('python', 'sage', language='sage', extension='.sage',
               template=python_template.replace('{future}', ''),
+              wrapper=sage_wrapper,
               extend = 'pytex.formatter = latex',
               commands='{sage} {file}.sage')
 
