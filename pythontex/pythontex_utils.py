@@ -393,22 +393,31 @@ class PythonTeXUtils(object):
         pass
 
     def code(self, codestr):
-        exec("from __main__ import *") in globals()
+        from __main__ import preparse
+        namespace = sys.modules['__main__'].__dict__
         for command in re.split(r'\n(?=\S)', codestr):
             if not re.match(r'^\s*$', command) and not re.match(r'^#', command):
                 print('\\begin{SaveVerbatim}{SageCode}')
                 print(command.rstrip())
                 print('\\end{SaveVerbatim}\n\\sageinputcode')
-                if re.match(r'^\w*\s*=', command):
-                    exec(preparse(command)) in globals()
+                if re.search(r';\s*$', command):
+                    # trailing semicolon - no output
+                    exec(preparse(command)) in namespace
                 else:
                     try:
-                        output = eval(preparse('latex('+command+')'), globals())
+                        match = re.match(r'^([^=\n]*)\s*=[^=]', command)
+                        if match:
+                            # assignment
+                            exec(preparse(command)) in namespace
+                            output = eval(preparse('latex('+match.group(1)+')'), namespace)
+                        else:
+                            # non-assignment
+                            output = eval(preparse('latex('+command+')'), namespace)
                         print('\\sageoutputmath{')
                         print(output)
                         print('}\n')
                     except SyntaxError:
-                        exec(preparse(command)) in globals()
+                        exec(preparse(command)) in namespace
 
     # We need a way to keep track of dependencies
     # We create a list that stores specified dependencies, and a method that
