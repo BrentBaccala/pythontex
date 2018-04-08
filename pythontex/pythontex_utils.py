@@ -20,6 +20,7 @@ import warnings
 import re
 if sys.version_info.major == 2:
     import io
+import ast
 
 # Most imports are only needed for SymPy; these are brought in via 
 # "lazy import."  Importing unicode_literals here shouldn't ever be necessary 
@@ -29,6 +30,21 @@ if sys.version_info.major == 2:
 # shouldn't cause any problems, since all strings in this file may be decoded 
 # as valid ASCII. (The actual file is encoded in utf-8, but only characters 
 # within the ASCII subset are actually used).
+
+# This next function is for my custom Sage code
+
+def ast_set_ctx(expr, ctx):
+    if isinstance(expr, ast.Name):
+        expr.ctx = ctx
+    elif isinstance(expr, ast.Tuple):
+        expr.ctx = ctx
+        expr.elts = ast_set_ctx(expr.elts, ctx)
+    elif isinstance(expr, ast.Subscript):
+        expr.ctx = ctx
+        expr.value = ast_set_ctx(expr.value, ctx)
+    elif isinstance(expr, list):
+        expr = map(lambda item: ast_set_ctx(item, ctx), expr)
+    return expr
 
 
 class PythonTeXUtils(object):
@@ -402,22 +418,30 @@ class PythonTeXUtils(object):
                 print('\\end{SaveVerbatim}\n\\sageinputcode')
                 if re.search(r';\s*$', command):
                     # trailing semicolon - no output
-                    exec(preparse(command)) in namespace
+                    exec preparse(command) in namespace
                 else:
                     try:
-                        match = re.match(r'^([^=\n]*)\s*=[^=]', command)
-                        if match:
-                            # assignment
-                            exec(preparse(command)) in namespace
-                            output = eval(preparse('latex('+match.group(1)+')'), namespace)
-                        else:
-                            # non-assignment
-                            output = eval(preparse('latex('+command+')'), namespace)
+                        # First, try to parse the command as an expression (won't work for assignments)
+                        expr = compile(preparse("latex(" + command + ")"), "stdin", "eval", ast.PyCF_ONLY_AST)
+                        output = eval(compile(expr, "stdin", "eval"), namespace)
                         print('\\sageoutputmath{')
                         print(output)
                         print('}\n')
-                    except SyntaxError:
-                        exec(preparse(command)) in namespace
+                    except (SyntaxError, TypeError):
+                        # Next, parse the command as a statement, and check to see if it's an assignment
+                        expr = compile(preparse(command), "stdin", "single", ast.PyCF_ONLY_AST)
+                        eval(compile(expr, "stdin", "single"), namespace)
+                        if isinstance(expr.body[0], ast.Assign):
+                            # It's an assignment.  Extract the target of the assignment, switch its
+                            # context from Store to Load, and build an expression that calls 'latex'
+                            # on it to print its value.
+                            target = ast_set_ctx(expr.body[0].targets[0], ast.Load())
+                            expr = ast.Expression(ast.Call(ast.Name('latex', ast.Load()), [target], [], None, None))
+                            fixed = ast.fix_missing_locations(expr)
+                            output = eval(compile(fixed, "stdin", "eval"), namespace)
+                            print('\\sageoutputmath{')
+                            print(output)
+                            print('}\n')
 
     # We need a way to keep track of dependencies
     # We create a list that stores specified dependencies, and a method that
