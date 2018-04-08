@@ -823,7 +823,7 @@ sage_wrapper = '''
     sys.stderr.write('{stderrdelim}\\n')
     pytex.before()
 
-    pytex.code("""
+    pytex.code(r"""
     {code}
     """)
 
