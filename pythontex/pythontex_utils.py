@@ -414,7 +414,7 @@ class PythonTeXUtils(object):
         for command in re.split(r'\n(?=\S)', codestr):
             if not re.match(r'^\s*$', command) and not re.match(r'^#', command):
                 print('\\begin{SaveVerbatim}{SageCode}')
-                print(command.rstrip())
+                print(command)
                 print('\\end{SaveVerbatim}\n\\sageinputcode')
                 if re.search(r';\s*$', command):
                     # trailing semicolon - no output
