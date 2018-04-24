@@ -42,6 +42,9 @@ def ast_set_ctx(expr, ctx):
     elif isinstance(expr, ast.Subscript):
         expr.ctx = ctx
         expr.value = ast_set_ctx(expr.value, ctx)
+    elif isinstance(expr, ast.Attribute):
+        expr.ctx = ctx
+        expr.value = ast_set_ctx(expr.value, ctx)
     elif isinstance(expr, list):
         expr = map(lambda item: ast_set_ctx(item, ctx), expr)
     return expr
