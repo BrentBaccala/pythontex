@@ -13,7 +13,7 @@ should be in the same directory.
 
 Licensed under the BSD 3-Clause License:
 
-Copyright (c) 2012-2017, Geoffrey M. Poore
+Copyright (c) 2012-2020, Geoffrey M. Poore
 
 All rights reserved.
 
@@ -62,6 +62,7 @@ from pygments.styles import get_all_styles
 from pythontex_engines import *
 import textwrap
 import platform
+import itertools
 
 if sys.version_info[0] == 2:
     try:
@@ -82,7 +83,7 @@ except NameError:
 
 # Script parameters
 # Version
-__version__ = '0.17dev'
+__version__ = '0.18dev'
 
 
 
@@ -873,12 +874,15 @@ def hash_all(data, temp_data, old_data, engine_dict):
             if family in pygments_settings:
                 if (not pygments_settings_changed[family] and
                         key in old_typeset_hash_dict and
-                        typeset_hash_dict[key] == old_typeset_hash_dict[key]):
+                        typeset_hash_dict[key] == old_typeset_hash_dict[key] and
+                        not modified_dependencies(key, data, old_data, temp_data)):
                     pygments_update[key] = False
                     if key in old_pygments_macros:
                         pygments_macros[key] = old_pygments_macros[key]
                     if key in old_pygments_files:
                         pygments_files[key] = old_pygments_files[key]
+                    if key in old_dependencies:
+                        dependencies[key] = old_dependencies[key]
                 else:
                     pygments_update[key] = True
             else:
@@ -1218,9 +1222,13 @@ def do_multiprocessing(data, temp_data, old_data, engine_dict):
         # Must double-escape any backslashes so that they survive `shlex.split()`
         script = basename
         if os.path.isabs(os.path.expanduser(os.path.normcase(outputdir))):
-            script_full = os.path.expanduser(os.path.normcase(os.path.join(outputdir, basename)))
+            script_full = os.path.expanduser(os.path.join(outputdir, basename))
         else:
-            script_full = os.path.expanduser(os.path.normcase(os.path.join(orig_cwd, outputdir, basename)))
+            script_full = os.path.expanduser(os.path.join(orig_cwd, outputdir, basename))
+        if platform.system() == 'Windows':
+            script_full = script_full.replace('/', '\\')
+        else:
+            script_full = script_full.replace('\\', '/')
         # `shlex.split()` only works with Unicode after 2.7.2
         if (sys.version_info.major == 2 and sys.version_info.micro < 3):
             exec_cmd = shlex.split(bytes(command.format(file=script.replace('\\', '\\\\'), File=script_full.replace('\\', '\\\\'))))
@@ -1280,7 +1288,11 @@ def do_multiprocessing(data, temp_data, old_data, engine_dict):
     for key in code_dict:
         family = key.split('#')[0]
         # Uncomment the following for debugging, and comment out what follows
-        '''run_code(encoding, outputdir, workingdir, code_dict[key],
+        '''run_code(encoding, outputdir,
+                                                 workingdir,
+                                                 cc_dict_begin[family],
+                                                 code_dict[key],
+                                                 cc_dict_end[family],
                                                  engine_dict[family].language,
                                                  engine_dict[family].commands,
                                                  engine_dict[family].created,
@@ -1294,9 +1306,12 @@ def do_multiprocessing(data, temp_data, old_data, engine_dict):
                                                  engine_dict[family].init,
                                                  engine_dict[family].post_processor,
                                                  keeptemps, hashdependencies,
-                                                 pygments_settings)'''
+                                                 pygments_settings]))'''
         tasks.append(pool.apply_async(run_code, [encoding, outputdir,
-                                                 workingdir, code_dict[key],
+                                                 workingdir,
+                                                 cc_dict_begin[family],
+                                                 code_dict[key],
+                                                 cc_dict_end[family],
                                                  engine_dict[family].language,
                                                  engine_dict[family].commands,
                                                  engine_dict[family].created,
@@ -1356,11 +1371,15 @@ def do_multiprocessing(data, temp_data, old_data, engine_dict):
 
     # Add a Pygments process
     if pygments_list:
+        # Uncomment the following for debugging
+        # do_pygments(encoding, outputdir, fvextfile, pygments_list,
+        #             pygments_settings, typeset_cache, hashdependencies)
         tasks.append(pool.apply_async(do_pygments, [encoding, outputdir,
                                                     fvextfile,
                                                     pygments_list,
                                                     pygments_settings,
-                                                    typeset_cache]))
+                                                    typeset_cache,
+                                                    hashdependencies]))
         if verbose:
             print('    - Pygments process')
 
@@ -1409,6 +1428,8 @@ def do_multiprocessing(data, temp_data, old_data, engine_dict):
                 if result['pygments_files'][k]:
                     new_files = True
                     break
+            for k, v in result['dependencies'].items():
+                dependencies[k] = v
             pygments_macros.update(result['pygments_macros'])
             errors += result['errors']
             warnings += result['warnings']
@@ -1421,7 +1442,7 @@ def do_multiprocessing(data, temp_data, old_data, engine_dict):
     unresolved_sessions = []
     for key in dependencies:
         for dep, val in dependencies[key].items():
-            if val[0] > start_time:
+            if val[0] is None or val[0] > start_time:
                 unresolved_dependencies = True
                 dependencies[key][dep] = (None, None)
                 unresolved_sessions.append(key.replace('#', ':'))
@@ -1483,7 +1504,8 @@ def do_multiprocessing(data, temp_data, old_data, engine_dict):
 
 
 
-def run_code(encoding, outputdir, workingdir, code_list, language, commands,
+def run_code(encoding, outputdir, workingdir,
+             cc_begin_list, code_list, cc_end_list, language, commands,
              command_created, extension, makestderr, stderrfilename,
              code_index, errorsig, warningsig, linesig, stderrlookbehind,
              init, post_processor, keeptemps, hashdependencies, pygments_settings):
@@ -1521,11 +1543,19 @@ def run_code(encoding, outputdir, workingdir, code_list, language, commands,
     err_file_name = os.path.expanduser(os.path.normcase(os.path.join(outputdir, basename + '.err')))
     out_file = open(out_file_name, 'w', encoding=encoding)
     err_file = open(err_file_name, 'w', encoding=encoding)
-    script = os.path.expanduser(os.path.normcase(os.path.join(outputdir, basename)))
+    script = os.path.expanduser(os.path.join(outputdir, basename))
+    if platform.system() == 'Windows':
+        script = script.replace('/', '\\')
+    else:
+        script = script.replace('\\', '/')
     if os.path.isabs(script):
         script_full = script
     else:
-        script_full = os.path.expanduser(os.path.normcase(os.path.join(os.getcwd(), outputdir, basename)))
+        script_full = os.path.expanduser(os.path.join(os.getcwd(), outputdir, basename))
+        if platform.system() == 'Windows':
+            script_full = script_full.replace('/', '\\')
+        else:
+            script_full = script_full.replace('\\', '/')
     # #### Need to revise so that intermediate files can be detected and cleaned up
     for f in command_created:
         files.append(f.format(file=script, File=script_full))
@@ -1546,7 +1576,10 @@ def run_code(encoding, outputdir, workingdir, code_list, language, commands,
         # Add any created files due to the command
         # This needs to be done before attempts to execute, to prevent orphans
         try:
-            proc = subprocess.Popen(exec_cmd, stdout=out_file, stderr=err_file)
+            if family != 'Rcon':
+                proc = subprocess.Popen(exec_cmd, stdout=out_file, stderr=err_file)
+            else:
+                proc = subprocess.Popen(exec_cmd, stdout=out_file, stderr=subprocess.STDOUT)
         except WindowsError as e:
             if e.errno == 2:
                 # Batch files won't be found when called without extension. They
@@ -1557,7 +1590,10 @@ def run_code(encoding, outputdir, workingdir, code_list, language, commands,
                 # under Windows; a list is not required.
                 exec_cmd_string = ' '.join(exec_cmd)
                 exec_cmd_string = 'cmd /C "@echo off & call {0} & if errorlevel 1 exit 1"'.format(exec_cmd_string)
-                proc = subprocess.Popen(exec_cmd_string, stdout=out_file, stderr=err_file)
+                if family != 'Rcon':
+                    proc = subprocess.Popen(exec_cmd_string, stdout=out_file, stderr=err_file)
+                else:
+                    proc = subprocess.Popen(exec_cmd_string, stdout=out_file, stderr=subprocess.STDOUT)
             else:
                 raise
 
@@ -1578,15 +1614,21 @@ def run_code(encoding, outputdir, workingdir, code_list, language, commands,
         messages.append('* PythonTeX error')
         messages.append('    Missing output file for ' + key_run.replace('#', ':'))
         errors += 1
+    elif family == 'juliacon' and proc.returncode == 1:
+        messages.append('* PythonTeX error')
+        messages.append('    Running code for Julia console failed')
+        with open(err_file_name, encoding='utf8') as f:
+            messages.append(f.read())
+        errors += 1
     else:
         if family == 'juliacon':
             with open(out_file_name.rsplit('.', 1)[0] + '.tex', 'r', encoding=encoding) as f:
                 tex_data_lines = f.readlines()
-            inst = 0
+            code_iter = itertools.chain(cc_begin_list, code_list, cc_end_list)
             for n, line in enumerate(tex_data_lines):
                 if line.rstrip() == '\\begin{juliaterm}':
-                    tex_data_lines[n] = '=>PYTHONTEX:STDOUT#{0}#code#\n'.format(inst)
-                    inst += 1
+                    c = next(code_iter)
+                    tex_data_lines[n] = '=>PYTHONTEX:STDOUT#{0}#code#\n'.format(c.instance)
                     if n != 0:
                         tex_data_lines[n-1] = ''
                 if line.rstrip() == '\\end{juliaterm}':
@@ -1594,6 +1636,29 @@ def run_code(encoding, outputdir, workingdir, code_list, language, commands,
             tex_data_lines.append('=>PYTHONTEX:DEPENDENCIES#\n=>PYTHONTEX:CREATED#\n')
             with open(out_file_name, 'w', encoding=encoding) as f:
                 f.write(''.join(tex_data_lines))
+        elif family == 'Rcon':
+            with open(out_file_name, 'r', encoding=encoding) as f:
+                stdout_lines = f.readlines()
+            for n, line in enumerate(stdout_lines):
+                if line.startswith('> =>PYTHONTEX:'):
+                    stdout_lines[n] = line[2:]
+                elif '> write("=>PYTHONTEX:' in line:
+                    if line.startswith('> write("=>PYTHONTEX:'):
+                        stdout_lines[n] = ''
+                    else:
+                        # cat() and similar functions can result in the
+                        # prompt not being at the start of a new line.  In
+                        # that case, preserve the prompt to accurately
+                        # emulate the console.  If there is a following
+                        # console environment, this effectively amounts
+                        # to adding an extra empty line (pressing ENTER)
+                        # between the two.
+                        stdout_lines[n] = line.split('write("=>PYTHONTEX:', 1)[0]
+            while stdout_lines and (stdout_lines[-1].startswith('>') and not stdout_lines[-1][1:].strip(' \n')):
+                stdout_lines.pop()
+            stdout_lines.append('=>PYTHONTEX:DEPENDENCIES#\n=>PYTHONTEX:CREATED#\n')
+            with open(out_file_name, 'w', encoding=encoding) as f:
+                f.write(''.join(stdout_lines))
 
         f = open(out_file_name, 'r', encoding=encoding)
         out = f.read()
@@ -1651,7 +1716,7 @@ def run_code(encoding, outputdir, workingdir, code_list, language, commands,
                 else:
                     dependencies[dep] = (os.path.getmtime(dep_file), '')
 
-            if family == 'juliacon':
+            if family in ('juliacon', 'Rcon'):
                 from pygments import highlight
                 from pygments.lexers import get_lexer_by_name
                 from pygments.formatters import LatexFormatter
@@ -1667,6 +1732,10 @@ def run_code(encoding, outputdir, workingdir, code_list, language, commands,
                 if block:
                     try:
                         delims, content = block.split('#\n', 1)
+                        if content and not content.endswith('\n'):
+                            # Content might not end with a newline.  For example,
+                            # Rcon with something like cat() as the last function.
+                            content += '\n'
                         instance, command = delims.split('#')
                     except:
                         messages.append('* PythonTeX error')
@@ -1675,13 +1744,14 @@ def run_code(encoding, outputdir, workingdir, code_list, language, commands,
                         break
                     if content or command in ('s', 'sub'):
                         if instance.endswith('CC'):
-                            messages.append('* PythonTeX warning')
-                            messages.append('    Custom code for "' + family + '" attempted to print or write to stdout')
-                            messages.append('    This is not supported; use a normal code command or environment')
-                            messages.append('    The following content was written:')
-                            messages.append('')
-                            messages.extend(['    ' + l for l in content.splitlines()])
-                            warnings += 1
+                            if family not in ('juliacon', 'Rcon'):
+                                messages.append('* PythonTeX warning')
+                                messages.append('    Custom code for "' + family + '" attempted to print or write to stdout')
+                                messages.append('    This is not supported; use a normal code command or environment')
+                                messages.append('    The following content was written:')
+                                messages.append('')
+                                messages.extend(['    ' + l for l in content.splitlines()])
+                                warnings += 1
                         elif command == 'i':
                             content = r'\pytx@SVMCR{pytx@MCR@' + key_run.replace('#', '@') + '@' + instance + '}\n' + content.rstrip('\n') + '\\endpytx@SVMCR\n\n'
                             macros.append(content)
@@ -1706,7 +1776,7 @@ def run_code(encoding, outputdir, workingdir, code_list, language, commands,
                                     content = content.rsplit('\n', 1)[0] + '\\endinput\n'
                             if callable(post_processor):
                                 content = post_processor(code_list[int(instance)].code, content)
-                            if family == 'juliacon':
+                            if family in ('juliacon', 'Rcon'):
                                 content = highlight(content, lexer[family], formatter[family])
                             f.write(content)
                             f.close()
@@ -1717,7 +1787,7 @@ def run_code(encoding, outputdir, workingdir, code_list, language, commands,
         messages.append('* PythonTeX error')
         messages.append('    Missing stderr file for ' + key_run.replace('#', ':'))
         errors += 1
-    elif family == 'juliacon':
+    elif family in ('juliacon', 'Rcon'):
         pass
     else:
         # Open error and code files.
@@ -1757,7 +1827,7 @@ def run_code(encoding, outputdir, workingdir, code_list, language, commands,
             index_next = index_now
             start_errgobble = None
             for n, line in enumerate(err_ud):
-                if basename in line:
+                if basename in line and (family not in ('perlsix', 'psix') or '.p6:' in line or '.p6 line' in line):
                     # Get the gobbleation.  This is used to determine if
                     # other lines containing the basename are a continuation,
                     # or separate messages.
@@ -1803,7 +1873,7 @@ def run_code(encoding, outputdir, workingdir, code_list, language, commands,
                                 # both the error and warning patterns, default to
                                 # error.
                                 past_line = err_ud[index]
-                                if (index < n and basename in past_line):
+                                if (index < n and basename in past_line and (family not in ('perlsix', 'psix') or '.p6:' in past_line or '.p6 line' in past_line)):
                                     break
                                 for pattern in warningsig:
                                     if pattern in past_line:
@@ -1867,8 +1937,9 @@ def run_code(encoding, outputdir, workingdir, code_list, language, commands,
                 index_now_last = index_now
                 index_next_last = index_next
                 err_key_last_int = -1
+                p6_sorry_search = False
                 for n, line in enumerate(err_ud):
-                    if basename in line:
+                    if basename in line and (family not in ('perlsix', 'psix') or '.p6:' in line or '.p6 line' in line):
                         # Determine the corresponding line number in the document
                         found = False
                         for pattern in linesig:
@@ -1930,6 +2001,35 @@ def run_code(encoding, outputdir, workingdir, code_list, language, commands,
                                 line = line.replace(fullbasename + '.' + extension, '<file>')
                             elif stderrfilename == 'genericscript':
                                 line = line.replace(fullbasename + '.' + extension, '<script>')
+                            if family in ('perlsix', 'psix'):
+                                # Perl 6 "SORRY!" errors during compiling
+                                # (before execution) need special processing,
+                                # since they lack stderr delims and must
+                                # include lines before the current one.
+                                if p6_sorry_search:  # Already handled
+                                    pass
+                                else:
+                                    p6_sorry_search = True
+                                    p6_sorry_index = n - 1
+                                    while p6_sorry_index >= 0:
+                                        if not err_ud[p6_sorry_index].startswith('===SORRY!==='):
+                                            p6_sorry_index -= 1
+                                            continue
+                                        if errlinenum > index_now[1].lines_total + index_now[1].lines_input:
+                                            p6_linenum_offset = index_now[1].lines_total
+                                        else:
+                                            p6_linenum_offset = index_now[1].lines_total - index_now[1].lines_user + index_now[1].inline_count
+                                        p6_preceding_err_lines = [sub(r'line ([1-9][0-9]*)', lambda m: 'line {0}'.format(int(m.group(1)) - p6_linenum_offset), x) for x in err_ud[p6_sorry_index:n]]
+                                        if stderrfilename == 'full':
+                                            p6_preceding_err_lines[0] = p6_preceding_err_lines[0].replace(fullbasename, basename)
+                                        elif stderrfilename == 'session':
+                                            p6_preceding_err_lines[0] = p6_preceding_err_lines[0].replace(fullbasename, session)
+                                        elif stderrfilename == 'genericfile':
+                                            p6_preceding_err_lines[0] = p6_preceding_err_lines[0].replace(fullbasename + '.' + extension, '<file>')
+                                        elif stderrfilename == 'genericscript':
+                                            p6_preceding_err_lines[0] = p6_preceding_err_lines[0].replace(fullbasename + '.' + extension, '<script>')
+                                        err_dict[err_key].extend(p6_preceding_err_lines)
+                                        break
                             err_dict[err_key].append(line)
                     elif process:
                         err_dict[err_key].append(line)
@@ -1991,7 +2091,7 @@ def run_code(encoding, outputdir, workingdir, code_list, language, commands,
                     # Never process delimiting info until it is used
                     # Rather, store the index of the last delimiter
                     last_delim = line
-                elif basename in line:
+                elif basename in line and (family not in ('perlsix', 'psix') or '.p6:' in line or '.p6 line' in line):
                     found_basename = True
                     # Get the gobbleation.  This is used to determine if
                     # other lines containing the basename are a continuation,
@@ -2146,7 +2246,7 @@ def run_code(encoding, outputdir, workingdir, code_list, language, commands,
                         else:
                             process = True
                             err_key = basename + '_' + instance
-                    elif process and basename in line:
+                    elif process and basename in line and (family not in ('perlsix', 'psix') or '.p6:' in line or '.p6 line' in line):
                         found = False
                         for pattern in linesig:
                             try:
@@ -2295,7 +2395,7 @@ def run_code(encoding, outputdir, workingdir, code_list, language, commands,
 
 
 def do_pygments(encoding, outputdir, fvextfile, pygments_list,
-                pygments_settings, typeset_cache):
+                pygments_settings, typeset_cache, hashdependencies):
     '''
     Create Pygments content.
 
@@ -2313,6 +2413,7 @@ def do_pygments(encoding, outputdir, fvextfile, pygments_list,
     warnings = 0
     messages = []
     messages.append('\n----  Messages for Pygments  ----')
+    dependencies = {}
 
     # Create dicts of formatters and lexers.
     formatter = dict()
@@ -2321,6 +2422,8 @@ def do_pygments(encoding, outputdir, fvextfile, pygments_list,
         if codetype != ':GLOBAL':
             p = pygments_settings[codetype]['formatter_options'].copy()
             p['commandprefix'] = 'PYG'
+            if pygments_settings[codetype]['lexer'] == 'pycon':
+                p['python3'] = True
             formatter[codetype] = LatexFormatter(**p)
             lexer[codetype] = get_lexer_by_name(pygments_settings[codetype]['lexer'], **p)
 
@@ -2333,6 +2436,12 @@ def do_pygments(encoding, outputdir, fvextfile, pygments_list,
                 f = open(c.extfile, encoding=encoding)
                 content = f.read()
                 f.close()
+                if hashdependencies:
+                    hasher = sha1()
+                    hasher.update(content.encode(encoding))
+                    dependencies[c.key_typeset] = {c.extfile: (os.path.getmtime(c.extfile), hasher.hexdigest())}
+                else:
+                    dependencies[c.key_typeset] = {c.extfile: (os.path.getmtime(c.extfile), '')}
             else:
                 content = None
                 messages.append('* PythonTeX error')
@@ -2371,6 +2480,7 @@ def do_pygments(encoding, outputdir, fvextfile, pygments_list,
     return {'process': 'pygments',
             'pygments_files': pygments_files,
             'pygments_macros': pygments_macros,
+            'dependencies': dependencies,
             'errors': errors,
             'warnings': warnings,
             'messages': messages}
@@ -2527,6 +2637,8 @@ def python_console(jobname, encoding, outputdir, workingdir, fvextfile,
         from pygments.formatters import LatexFormatter
         p = pygments_settings['formatter_options'].copy()
         p['commandprefix'] = 'PYG'
+        if pygments_settings['lexer'] == 'pycon':
+            p['python3'] = True
         formatter = LatexFormatter(**p)
         lexer = get_lexer_by_name(pygments_settings['lexer'], **p)
     else:

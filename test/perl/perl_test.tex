@@ -21,80 +21,79 @@
 \usepackage{amssymb,amsmath}
 \usepackage{graphicx}
 \usepackage{fullpage}
-\usepackage[keeptemps=all, makestderr, usefamily={julia}]{pythontex}
+\usepackage[keeptemps=all, makestderr, usefamily={perl}]{pythontex}
 
 
 \begin{document}
 
 
 
-\section*{Julia}
+\section*{Perl}
 
 \subsection*{Commands}
 
-\julia{2^8}
+\perl{2**8}
 
-\juliac{println(2^16)}
+\perlc{print 2**16;}
 
-\juliab{println(2^32)}
+\perlb{print 2**32;}
 
 \printpythontex
 
-\juliav{println(2^32)}
+\perlv{print 2**32;}
 
-\julias{\LaTeX\ and then \textcolor{blue}{!{"Julia"}} and back to \LaTeX.}
+\perls{\LaTeX\ and then \textcolor{blue}{!{"Perl"}} and back to \LaTeX.}
 
 
 \subsection*{Environments}
 
 Code:
-\begin{juliacode}
-println("A string.")
-println(2^8)
-\end{juliacode}
+\begin{perlcode}
+print "A string." . " ";
+print 2**8;
+\end{perlcode}
 
 Block:
-\begin{juliablock}
-println("A string.")
-println(2^8)
-\end{juliablock}
+\begin{perlblock}
+print "A string." . " ";
+print 2**8;
+\end{perlblock}
 
 \printpythontex
 
 Verbatim:
-\begin{juliaverbatim}
-println("A string.")
-println(2^8)
-\end{juliaverbatim}
+\begin{perlverbatim}
+print "A string." . " ";
+print 2**8;
+\end{perlverbatim}
 
 Sub:
-\begin{juliasub}
-\LaTeX\ and then \textcolor{blue}{!{"Julia"}} and back to \LaTeX.
-\end{juliasub}
+\begin{perlsub}
+\LaTeX\ and then \textcolor{blue}{!{"Perl"}} and back to \LaTeX.
+\end{perlsub}
 
 
-\section*{Julia stderr}
+\section*{Perl stderr}
 
 
-\begin{juliablock}[err1][numbers=left]
+\begin{perlblock}[err1][numbers=left]
 # Comment
-s = """
-    Julia a
-\end{juliablock}
+my $s = "Perl a
+\end{perlblock}
 
 \stderrpythontex[][breaklines, breakafter=\\/]
 
-\begin{juliablock}[err2][numbers=left]
-1+
-\end{juliablock}
+\begin{perlblock}[err2][numbers=left]
+1+;
+\end{perlblock}
 
 \stderrpythontex[][breaklines, breakafter=\\/]
 
-\begin{juliablock}[err3][numbers=left]
+\begin{perlblock}[err3][numbers=left]
 # Comment
 # Another comment
-1 + "ab"
-\end{juliablock}
+"a" "b";
+\end{perlblock}
 
 \stderrpythontex[][breaklines, breakafter=\\/]
 

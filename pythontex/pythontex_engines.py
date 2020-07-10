@@ -17,7 +17,7 @@ document (script for execution).
 
 
 
-Copyright (c) 2012-2017, Geoffrey M. Poore
+Copyright (c) 2012-2018, Geoffrey M. Poore
 All rights reserved.
 Licensed under the BSD 3-Clause License:
     http://www.opensource.org/licenses/BSD-3-Clause
@@ -33,7 +33,8 @@ from hashlib import sha1
 from collections import OrderedDict, namedtuple
 
 
-interpreter_dict = {k:k for k in ('python', 'ruby', 'julia', 'octave', 'bash', 'sage', 'rustc', 'maxima')}
+interpreter_dict = {k:k for k in ('python', 'ruby', 'julia', 'octave', 'bash',
+                                  'sage', 'rustc', 'maxima', 'Rscript', 'perl', 'perl6')}
 # The {file} field needs to be replaced by itself, since the actual
 # substitution of the real file can only be done at runtime, whereas the
 # substitution for the interpreter should be done when the engine is
@@ -196,7 +197,7 @@ class CodeEngine(object):
                 if not isinstance(l, str):
                     raise TypeError('CodeEngine needs "linenumbers" to contain strings')
         # Need to replace tags
-        linenumbers = [l.replace('{number}', r'(\d+)') for l in linenumbers]
+        linenumbers = [r'(\d+)'.join(re.escape(x) for x in l.split('{number}')) if '{number}' in l else l for l in linenumbers]
         self.linenumbers = linenumbers
 
         # Type check lookbehind
@@ -981,7 +982,7 @@ julia_template = '''
     # Currently, Julia only supports UTF-8
     # So can't set stdout and stderr encoding
 
-    type JuliaTeXUtils
+    mutable struct JuliaTeXUtils
         id::AbstractString
         family::AbstractString
         session::AbstractString
@@ -1014,8 +1015,8 @@ julia_template = '''
         function JuliaTeXUtils()
             self = new()
             self.self = self
-            self._dependencies = Array{{AbstractString}}(0)
-            self._created = Array{{AbstractString}}(0)
+            self._dependencies = AbstractString[]
+            self._created = AbstractString[]
             self._context_raw = ""
 
             function formatter(expr)
@@ -1126,7 +1127,7 @@ julia_wrapper = '''
     jltex.line = "{line}"
 
     println("{stdoutdelim}")
-    write(STDERR, "{stderrdelim}\\n")
+    write(stderr, "{stderrdelim}\\n")
     jltex.before()
 
     {code}
@@ -1137,14 +1138,14 @@ julia_wrapper = '''
 julia_sub = '''println("{field_delim}")\nprintln({field})\n'''
 
 
-CodeEngine('julia', 'julia', '.jl', '{julia} "{file}.jl"', julia_template,
+CodeEngine('julia', 'julia', '.jl', '{julia} --project=@. "{file}.jl"', julia_template,
               julia_wrapper, 'println(jltex.formatter({code}))', julia_sub,
               'ERROR:', 'WARNING:', ':{number}', True)
 
 SubCodeEngine('julia', 'jl')
 
 
-CodeEngine('juliacon', 'julia', '.jl', '{julia} -e "using Weave; weave(\\"{File}.jl\\", \\"tex\\")"', '{body}\n',
+CodeEngine('juliacon', 'julia', '.jl', '{julia} --project=@. -e "using Weave; weave(\\"{File}.jl\\", \\"tex\\")"', '{body}\n',
            '#+ term=true\n{code}\n', '', '',
            'ERROR:', 'WARNING:', ':{number}', True, created='{File}.tex')
 
@@ -1298,6 +1299,7 @@ CodeEngine('octave', 'octave', '.m',
            octave_template, octave_wrapper, 'disp({code})', octave_sub,
            'error', 'warning', 'line {number}')
 
+
 bash_template = '''
     cd "{workingdir}"
     {body}
@@ -1328,7 +1330,7 @@ rust_template = '''
         use std::{{borrow, collections, fmt, fs, io, iter, ops, path}};
         use self::OpenMode::{{ReadMode, WriteMode, AppendMode, TruncateMode, CreateMode, CreateNewMode}};
         pub struct UserAction<'u> {{
-            _act: Box<FnMut() + 'u>
+            _act: Box<dyn FnMut() + 'u>
         }}
         impl<'u> UserAction<'u> {{
             pub fn new() -> Self {{
@@ -1354,8 +1356,8 @@ rust_template = '''
         impl<'u, U: Into<UserAction<'u>> + 'u> ops::Add<U> for UserAction<'u> {{
             type Output = UserAction<'u>;
             fn add(self, f: U) -> Self::Output {{
-                let mut self_act: Box<FnMut() + 'u> = self._act;
-                let mut other_act: Box<FnMut() + 'u> = f.into()._act;
+                let mut self_act: Box<dyn FnMut() + 'u> = self._act;
+                let mut other_act: Box<dyn FnMut() + 'u> = f.into()._act;
                 Self::from(move || {{ self_act.as_mut()(); other_act.as_mut()(); }})
             }}
         }}
@@ -1366,7 +1368,7 @@ rust_template = '''
             }}
         }}
         impl<'u> ops::Deref for UserAction<'u> {{
-            type Target = FnMut() + 'u;
+            type Target = dyn FnMut() + 'u;
             fn deref(&self) -> &Self::Target {{
                 &*self._act
             }}
@@ -1377,7 +1379,7 @@ rust_template = '''
             }}
         }}
         pub struct RustTeXUtils<'u> {{
-            _formatter: Box<FnMut(&fmt::Display) -> String + 'u>,
+            _formatter: Box<dyn FnMut(&dyn fmt::Display) -> String + 'u>,
             pub before: UserAction<'u>,
             pub after: UserAction<'u>,
             pub family: &'u str,
@@ -1441,7 +1443,7 @@ rust_template = '''
         impl<'u> RustTeXUtils<'u> {{
             pub fn new() -> Self {{
                 RustTeXUtils {{
-                    _formatter: Box::new(|x: &fmt::Display| format!("{{}}", x)),
+                    _formatter: Box::new(|x: &dyn fmt::Display| format!("{{}}", x)),
                     before: UserAction::new(),
                     after: UserAction::new(),
                     family: "{family}",
@@ -1459,7 +1461,7 @@ rust_template = '''
             pub fn formatter<A: fmt::Display>(&mut self, x: A) -> String {{
                 (self._formatter)(&x)
             }}
-            pub fn set_formatter<F: FnMut(&fmt::Display) -> String + 'u>(&mut self, f: F) {{
+            pub fn set_formatter<F: FnMut(&dyn fmt::Display) -> String + 'u>(&mut self, f: F) {{
                 self._formatter = Box::new(f);
             }}
             pub fn add_dependencies<SS: IntoIterator>(&mut self, deps: SS)
@@ -1794,3 +1796,206 @@ CodeEngine('maxima', 'maxima', '.mac',
            'line {number}',
            init = maxima_init,
            post_processor = maxima_post_processor)
+
+r_template = '''
+    library(methods)
+    setwd("{workingdir}")
+    pdf(file=NULL)
+    {body}
+    write("{dependencies_delim}", stdout())
+    write("{created_delim}", stdout())
+    '''
+
+r_wrapper = '''
+    write("{stdoutdelim}", stdout())
+    write("{stderrdelim}", stderr())
+    {code}
+    '''
+
+r_sub = '''
+    write("{field_delim}", stdout())
+    write(toString({field}), stdout())
+    '''
+
+CodeEngine('R', 'R', '.R',
+           '{Rscript} "{file}.R"',
+           r_template, r_wrapper, 'write(toString({code}), stdout())', r_sub,
+           ['error', 'Error'], ['warning', 'Warning'],
+           'line {number}')
+
+
+rcon_template = '''
+    options(echo=TRUE, error=function(){{}})
+    library(methods)
+    setwd("{workingdir}")
+    pdf(file=NULL)
+    {body}
+    '''
+
+rcon_wrapper = '''
+    write("{stdoutdelim}", stdout())
+    {code}
+    '''
+
+CodeEngine('Rcon', 'R', '.R',
+           '{Rscript} "{file}.R"',
+           rcon_template, rcon_wrapper, '', '',
+           ['error', 'Error'], ['warning', 'Warning'],
+           '')
+
+
+perl_template = '''
+    use v5.14;
+    use utf8;
+    use strict;
+    use autodie;
+    use warnings;
+    use warnings qw(FATAL utf8);
+    use feature qw(unicode_strings);
+    use open qw(:encoding(UTF-8) :std);
+    chdir("{workingdir}");
+    {body}
+    print STDOUT "{dependencies_delim}\\n";
+    print STDOUT "{created_delim}\\n";
+    '''
+
+perl_wrapper = '''
+    print STDOUT "{stdoutdelim}\\n";
+    print STDERR "{stderrdelim}\\n";
+    {code}
+    '''
+
+perl_sub = '''
+    print STDOUT "{field_delim}\\n";
+    print STDOUT "" . ({field});
+    '''
+
+CodeEngine('perl', 'perl', '.pl',
+           '{perl} "{file}.pl"',
+           perl_template, perl_wrapper, 'print STDOUT "" . ({code});', perl_sub,
+           ['error', 'Error'], ['warning', 'Warning'],
+           'line {number}')
+
+SubCodeEngine('perl', 'pl')
+
+
+perl6_template = '''
+    use v6;
+    chdir("{workingdir}");
+    {body}
+    put "{dependencies_delim}";
+    put "{created_delim}";
+    '''
+
+perl6_wrapper = '''
+    put "{stdoutdelim}";
+    note "{stderrdelim}";
+    {code}
+    '''
+
+perl6_sub = '''
+    put "{field_delim}";
+    put ({field});
+    '''
+
+CodeEngine('perlsix', 'perl6', '.p6',
+           '{perl6} "{File}.p6"',
+           perl6_template, perl6_wrapper, 'put ({code});', perl6_sub,
+           ['error', 'Error', 'Cannot'], ['warning', 'Warning'],
+           ['.p6:{number}', '.p6 line {number}'], True)
+
+SubCodeEngine('perlsix', 'psix')
+
+javascript_template = '''
+    jstex = {{
+        before : function () {{ }},
+        after : function () {{ }},
+        _dependencies : [ ],
+        _created : [ ],
+        add_dependencies : function () {{
+            jstex._dependencies = jstex._dependencies.concat(
+                Array.prototype.slice.apply( arguments ) );
+        }},
+        add_created : function () {{
+            jstex._created = jstex._created.concat(
+                Array.prototype.slice.apply( arguments ) );
+        }},
+        cleanup : function () {{
+            console.log( "{dependencies_delim}" );
+            jstex._dependencies.map(
+                dep => console.log( dep ) );
+            console.log( "{created_delim}" );
+            jstex._dependencies.map(
+                cre => console.log( cre ) );
+        }},
+        formatter : function ( x ) {{
+            return String( x );
+        }},
+        escape : function ( x ) {{
+            return String( x ).replace( /_/g, '\\\\_' )
+                              .replace( /\\$/g, '\\\\$' )
+                              .replace( /\\^/g, '\\\\^' );
+        }},
+        docdir : process.cwd(),
+        context : {{ }},
+        _context_raw : '',
+        set_context : function ( expr ) {{
+            if ( expr != '' && expr != jstex._context_raw ) {{
+                jstex.context = {{ }};
+                expr.split( ',' ).map( pair => {{
+                    const halves = pair.split( '=' );
+                    jstex.context[halves[0].trim()] = halves[1].trim();
+                }} );
+            }}
+        }}
+    }};
+
+    try {{
+        process.chdir( "{workingdir}" );
+    }} catch ( e ) {{
+        if ( process.argv.indexOf( '--manual' ) == -1 )
+            console.error( e );
+    }}
+    if ( module.paths.indexOf( jstex.docdir ) == -1 )
+        module.paths.unshift( jstex.docdir );
+
+    {extend}
+
+    jstex.id = "{family}_{session}_{restart}";
+    jstex.family = "{family}";
+    jstex.session = "{session}";
+    jstex.restart = "{restart}";
+
+    {body}
+
+    jstex.cleanup();
+    '''
+
+javascript_wrapper = '''
+    jstex.command = "{command}";
+    jstex.set_context( "{context}" );
+    jstex.args = "{args}";
+    jstex.instance = "{instance}";
+    jstex.line = "{line}";
+
+    console.log( "{stdoutdelim}" );
+    console.error( "{stderrdelim}" );
+    jstex.before();
+
+    {code}
+
+    jstex.after();
+    '''
+
+javascript_sub = '''
+    console.log( "{field_delim}" );
+    console.log( {field} );
+    '''
+
+CodeEngine('javascript', 'javascript', '.js',
+           'node "{file}.js"',
+           javascript_template, javascript_wrapper,
+           'console.log( jstex.formatter( {code} ) )',
+           javascript_sub,
+           ['error', 'Error'], ['warning', 'Warning'],
+           ':{number}')
