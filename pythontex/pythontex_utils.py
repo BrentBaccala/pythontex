@@ -46,7 +46,7 @@ def ast_set_ctx(expr, ctx):
         expr.ctx = ctx
         expr.value = ast_set_ctx(expr.value, ctx)
     elif isinstance(expr, list):
-        expr = map(lambda item: ast_set_ctx(item, ctx), expr)
+        expr = list(map(lambda item: ast_set_ctx(item, ctx), expr))
     return expr
 
 
@@ -421,7 +421,7 @@ class PythonTeXUtils(object):
                 print('\\end{SaveVerbatim}\n\\sageinputcode')
                 if re.search(r';\s*$', command):
                     # trailing semicolon - no output
-                    exec preparse(command) in namespace
+                    exec(preparse(command), namespace)
                 else:
                     try:
                         # First, try to parse the command as an expression (won't work for assignments)
@@ -439,7 +439,7 @@ class PythonTeXUtils(object):
                             # context from Store to Load, and build an expression that calls 'latex'
                             # on it to print its value.
                             target = ast_set_ctx(expr.body[0].targets[0], ast.Load())
-                            expr = ast.Expression(ast.Call(ast.Name('latex', ast.Load()), [target], [], None, None))
+                            expr = ast.Expression(ast.Call(ast.Name('latex', ast.Load()), [target], []))
                             fixed = ast.fix_missing_locations(expr)
                             output = eval(compile(fixed, "stdin", "eval"), namespace)
                             print('\\sageoutputmath{')
