@@ -805,7 +805,7 @@ python_sub = '''print('{field_delim}')\nprint({field})\n'''
 
 
 CodeEngine('python', 'python', '.py', '{python} {file}.py',
-           python_template, python_wrapper, 'print(pytex.formatter({code}))',
+           python_template, python_wrapper, 'pytex.formatter({code})',
            python_sub, 'Error:', 'Warning:', ['line {number}', ':{number}:'])
 
 SubCodeEngine('python', 'py')
